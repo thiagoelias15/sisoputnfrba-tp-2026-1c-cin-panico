@@ -52,5 +52,6 @@ y argv[numero]guarda la palabra en esa posicion exacta*/
     close(fd_memoria); close(fd_scheduler);close (fd_ms);
     config_destroy(config); //liberamos la memoria del config
     log_destroy(logger);
+
     return 0; 
 }
