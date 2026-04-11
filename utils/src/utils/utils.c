@@ -33,13 +33,10 @@ int iniciar_servidor(char* puerto){
 
 	freeaddrinfo(servinfo);
 
-	log_trace(logger, "Listo para escuchar a mi cliente");
-
     return socket_servidor;
 }
 int esperar_cliente(int socket_servidor){ //aceptamos una conexion entrante(en esta parte se bloquea hasta que el server recibe a alguien )
     int socket_cliente = accept(socket_servidor,NULL,NULL);
-    log_info(logger, "Se conecto un cliente!");
     return socket_cliente;
 } 
  //funciones de cliente
@@ -63,3 +60,30 @@ int esperar_cliente(int socket_servidor){ //aceptamos una conexion entrante(en e
     return socket_cliente;
 }
 
+void enviar_mensaje(char* mensaje,int socket_cleinte){
+    int tamaño_mensaje =strlen(mensaje)+1; //aca vemos el largo del string y +1 para que se incluya el \0 para marcar el final
+    int cod_op =MENSAJE;
+    int tamaño_total = sizeof(int)*2+ tamaño_mensaje; //Eel paquete pesa 4bytes (cod_op) +4 bytes(tamaño)+ el peso del texto
+void* buffer =malloc(tamaño_total); // pedimos a Linux un bloque de memoria RAM vacío del tamaño exacto
+int desplazamiento=0;
+memcpy(buffer + desplazamiento,&cod_op,sizeof(int)); //memcpy es Memory Copy va a agarrar los bytes guardados y meterlos donde queramos
+//buffer + desplazamiento es para recorrer el puntero, primero seria buffer+0 ahi se carga cod_op y avanza 4, el siguiente es buffer + 4 y asi 
+send(socket_cliente,buffer,tamaño_total,0);
+free(buffer); //liberamos memoria para no saturar la ram
+}
+int recibir_operacion(int socket_cliente){
+    int cod_op:
+    if(recv(socket_cliente,&cod_op,sizeof(int),MSG_WAITALL)>0){ //leemos los primero 4 bytes que llegan (el int del cod_Op)
+    return cod_op;
+}else{// si recv devuelve 0 o -1, significa que el cleinte del otro lado esta apagado
+    close(socket_cliente);
+    return -1;
+}
+}
+char* recibir_mensaje(int socket_cliente){
+    int tamaño_mensaje;
+    recv(socket_cliente,&tamaño_mensaje,sizeof(int),MGS_WAITALL); //como ya leimos el cod_op antes lo siguiente son los 4 bytes del tamaño
+    char* buffer = malloc(tamaño_mensaje); //sabiendo el tamaño pedimos memoria para guardar el texto
+    recv(socket_cliente,buffer,tamaño_mensaje,MSG_WAITALL);// leemos el mensaje y lo guardamos
+    return buffer;
+}
