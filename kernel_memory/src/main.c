@@ -1,20 +1,25 @@
 #include <utils/utils.h>
 
 int main (int argc, char*argv[]){
+      t_log* logger = log_create("memoria.log","MEMORIA",1,LOG_LEVEL_INFO);
     if(argc <2){
         printf("Error: Mal ejecutado");
         return EXIT_FAILURE;
     }
+ 
    // cargamos el config para sacar la informacion
    t_config* config = iniciar_config(argv[1]);
-   char* puerto_escucha = config_get_string_value(config, "PUERTO_ESCUCHA");
-
+   char* puerto = config_get_string_value(config, "PUERTO_ESCUCHA");
+if(puerto == NULL){
+    log_error(logger,"No se encontro el PUERTO_ESCUCHA en el config");
+    return EXIT_FAILURE;
+}
    //iniciamos logger 
-   t_log* logger = log_create("memoria.log","MEMORIA",1,LOG_LEVEL_INFO);
-   log_info(logger, "Iniciando Servidor de Memoria en el puerto %s", puerto_escucha);
+   
+   log_info(logger, "Iniciando Servidor de Memoria en el puerto %s", puerto);
 
    //Abrimos el puerto para empezar a escuchar
-   int fd_escucha = iniciar_servidor(puerto_escucha);
+   int fd_escucha = iniciar_servidor(puerto);
    if(fd_escucha == -1){
     log_error(logger,"Fallo al iniciar el servidor de memoria");
     return EXIT_FAILURE;
@@ -86,5 +91,5 @@ return 0;
 
 
 
-}
+
 

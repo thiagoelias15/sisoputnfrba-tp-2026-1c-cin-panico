@@ -1,11 +1,11 @@
 #include <utils/utils.h>
-
+#include <stdio.h>
 int main(int argc,char* argv[])/*
 argc guarda la cantidad de palabras de la terminal 
 y argv[numero]guarda la palabra en esa posicion exacta*/
 {
-    if(argc<3){ /*si la cantidad de palabras de la termina es menor a 3 error */
-        prinf("Error, se debe usar: ./bin/cpu ./config[id/numero]\n");
+    if(argc<2){ /*si la cantidad de palabras de la termina es menor a 3 error */
+        printf("Error, se debe usar: ./bin/cpu ./config\n");
         return EXIT_FAILURE;
     }
 
@@ -18,11 +18,9 @@ y argv[numero]guarda la palabra en esa posicion exacta*/
     char* port_sched = config_get_string_value(config, "PUERTO_SCHEDULER"); /*aca estamos sacando la informacion,del .config, que necesita la cpu para conectarse a los demas modulos*/
     
     t_log* logger = log_create("cpu.log", "CPU", 1, LOG_LEVEL_INFO);
-    log_info(logger, "Iniciando CPU numero %s",argv[2]);
+    log_info(logger, "Iniciando CPU" );
     
-    // Usamos %s porque argv[2] ya es un texto, %s le dice que debe dejar espacio para un string y va y busca un string, argv[2] donde esta guardado el numero o ID de la cpu.
-
-    //conexiones
+//conexiones
     //Ahora usamos las variables que sacamos del config(ip_mem,port_mem,etc)
     int fd_memoria = crear_conexion(ip_mem,port_mem);
     if(fd_memoria !=-1){
