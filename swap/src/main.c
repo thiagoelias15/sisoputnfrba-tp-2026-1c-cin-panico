@@ -13,7 +13,7 @@ int main(int argc, char* argv[]) {
     // 2 - Extraccion de parametros del config
     char* ip_mem = config_get_string_value(config, "IP_MEMORIA");
     char* port_mem = config_get_string_value(config, "PUERTO_MEMORIA");
-    
+    char* mi_id = config_get_string_value(config,"ID_MODULO");
     // 3 - Iniciamos logger
     t_log* logger = log_create("swap.log","SWAP",1,LOG_LEVEL_INFO);
     log_info(logger, "Iniciando modulo de SWAP  ");
@@ -21,7 +21,7 @@ int main(int argc, char* argv[]) {
     // 4 - Conexiones
     int fd_memoria = crear_conexion(ip_mem, port_mem);
     if(fd_memoria != -1) {
-        enviar_mensaje("HANDSHAKE_SWAP", fd_memoria);
+        enviar_mensaje(mi_id,MENSAJE, fd_memoria);
         log_info(logger, "SWAP conectada al Kernel Memory.");
     }
 

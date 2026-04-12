@@ -13,7 +13,7 @@ t_config* iniciar_config(char* path_config) {
 
 int iniciar_servidor(char* puerto) {
     if (puerto != NULL) {
-        puerto[strcspn(puerto, "\r\n ;")] = 0;
+        puerto[strcspn(puerto, "\r\n ;")] = 0;// borra de los archvios de texto(configs)si quedo un espacio,\n,ocaracteres invisibles al final de la linea de la terminal
     }
 
     int socket_servidor;
@@ -28,14 +28,14 @@ int iniciar_servidor(char* puerto) {
         return -1;
     }
 
-    // 1. CREAR EL SOCKET (Vital hacerlo antes del bind)
+    // 1. CREAR EL SOCKET 
     socket_servidor = socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol);
     if (socket_servidor == -1) {
         freeaddrinfo(servinfo);
         return -1;
     }
 
-    // 2. CONFIGURAR REUSEADDR
+    // 2. esta funciones permite que cuando uno cierra una conexion con ctrl+c normalmente hay un tiempo de espera para volver a hacer un bind y tiraria error,esto permite eliminar dicho tiempo de espera.
     int yes = 1;
     setsockopt(socket_servidor, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
 
@@ -84,9 +84,12 @@ int crear_conexion(char* ip, char* puerto) {
     return socket_cliente;
 }
 
-void enviar_mensaje(char* mensaje, int socket_cliente) {
+void enviar_mensaje(char* mensaje, op_code codigo_operacion, int socket_cliente) {
     int tamaño_mensaje = strlen(mensaje) + 1;
-    int cod_op = MENSAJE;
+    
+    
+    int cod_op = codigo_operacion; 
+    
     int tamaño_total = sizeof(int) * 2 + tamaño_mensaje;
 
     void* buffer = malloc(tamaño_total);
