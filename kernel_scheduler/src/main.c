@@ -1,7 +1,7 @@
 #include <utils/utils.h>
 int main(int argc,char* argv[]){
     //verifiacion del archivo config
-    if(agrc<2){
+    if(argc<2){
         printf("Error: Mal ejecutado");
         return EXIT_FAILURE; 
     }
@@ -10,7 +10,7 @@ t_config* config = iniciar_config(argv[1]);
 char* ip_mem = config_get_string_value(config, "IP_MEMORIA");
 char* port_mem = config_get_string_value(config, "PUERTO_MEMORIA");
 char* puerto_escucha = config_get_string_value(config, "PUERTO_ESCUCHA");
-
+char* mi_id = config_get_string_value(config, "ID_MODULO");
 //iniciamos logger
 t_log* logger = log_create("Scheduler.log","SCHEDULER",1,LOG_LEVEL_INFO);
 log_info(logger,"Iniciando Scheduler");
@@ -18,10 +18,10 @@ log_info(logger,"Iniciando Scheduler");
 // 1° Scheduler actua como cliente
 int fd_memoria = crear_conexion(ip_mem,port_mem);
 if(fd_memoria !=-1){
-    enviar_mensaje("HANDSHAKE_SCHEDULER",fd_memoria);
-    log_info(logger, "Scheduler conectado a la memoria");
+    enviar_mensaje(mi_id, MENSAJE, fd_memoria);
+    log_info(logger, "Scheduler conectado a la memoria con ID: %s",mi_id);
 }else{
-    log_error(logger,"Fallo la conexion a la memoria");
+    log_error(logger,"Fallo la conexion a la memoria,la memory no esta encendida");
     return EXIT_FAILURE;// si la memoria no esta prendida error
 }
 
@@ -42,24 +42,24 @@ while(clientes_sched<2){
     int socket_cliente = esperar_cliente(fd_escucha);
     int cod_op = recibir_operacion(socket_cliente);
     if(cod_op==MENSAJE){
-        char* mensaje = recibir_mensaje(socket_cliente);
-        if(strcmp(mensaje,"HANDSHAKE_CPU")==0){
-            og_info(logger, "CPU Conectada al Scheduler");
+        char* id_recibida = recibir_mensaje(socket_cliente);
+        if(strcmp(id_recibida, "CPU")==0){
+            log_info(logger, "CPU Conectada al Scheduler");
                 fd_cpu = socket_cliente;
                 clientes_sched++;
             } 
-            else if (strcmp(mensaje, "HANDSHAKE_IO") == 0) {
-                log_info(logger, "IO Conectada al Scheduler");
+            else if (strcmp(id_recibida, "IO") == 0) {
+                log_info(logger, "Interfaz de IO Conectada al Scheduler: %s",id_recibida);
                 fd_io = socket_cliente;
                 clientes_sched++;
             } 
             else {
-                log_warning(logger, "Modulo desconocido en el Scheduler: %s", mensaje);
+                log_warning(logger, "Modulo desconocido en el Scheduler: %s", id_recibida);
                 close(socket_cliente);
             }
             
-            // Liberar la memoria del texto que recibimos (el buffer del tren)
-            free(mensaje);
+            // Liberar la memoria del ID que recibimos
+            free(id_recibida);
 
         } else {
             log_warning(logger, "Operacion desconocida. Se esperaba un MENSAJE.");
@@ -105,5 +105,5 @@ while(clientes_sched<2){
 
 
 
-}
+
 
