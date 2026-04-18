@@ -6,6 +6,9 @@
 - Conexiones del I/O
 - Conexiones Memory
 - Conexiones del Memory Stick
-- Conexiones del Kernel Scheduler (ojo vinculacion con kernel memory)
+- Checkpoint 2 utils
 
-## PENDIENTE
+## INCOMPLETO
+
+- checkpoint 2 todos los modulos xd
+
