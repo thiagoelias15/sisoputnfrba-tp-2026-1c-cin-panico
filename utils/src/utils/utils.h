@@ -9,7 +9,13 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <commons/log.h>
+#include <pthread.h>
+#include <semaphore.h>
+#include <commons/log.h>
 #include <commons/config.h> // Libreria para leer archivos .config
+#include <commons/collections/list.h>
+#include <commons/collections/queue.h>
+#include <commons/collections/dictionary.h>
 
 // Códigos para avisarle al que recibe que tipo de paquete estamos mandando
 
@@ -26,8 +32,33 @@ typedef enum {
     MENSAJE,
     PAQUETE,
     HANDSHAKE_CPU_A_MS,
+   //operaciones del checkpoint 2
+    SOLICITUD_INSTRUCCION,
+    CONTEXTO_PCB,
+    INTERRUPCION,
+    //Syscalls(peticiones de CPU a scheduler)
+    SYSCALL_SLEPP,
+    SYSCALL_STDIN,
+    SYSCALL_STDOUT,
+    SYSCALL_MUTEX_CREATE,
+    SYSCALL_MUTEX_LOCK,
+    SYSCALL_EXIT
 } op_code;
 
+// estructura del PCB(process control block)
+typedef struct{
+uint32_t pid;      
+    uint32_t pc;       
+    
+    // Registros de 1 byte
+    uint8_t ax, bx, cx, dx;
+
+    // Registros de 4 bytes
+    uint32_t eax, ebx, ecx, edx;
+
+    // Registros de dirección lógica (4 bytes)
+    uint32_t si, di;
+} t_pcb;
 
 // Se definen las funciones a utilizar en los módulos
 
@@ -39,5 +70,9 @@ t_config* iniciar_config(char*path_config);
 void enviar_mensaje(char* mensaje, op_code codigo_operacion, int socket_cliente);
 int recibir_operacion(int socket_cliente);
 char* recibir_mensaje(int socket_cliente);
+
+//funciones para el intercambio de contextos
+void enviar_pcb(t_pcb* pcb,int socket,op_code cod_op);
+t_pcb* recibir_pcb(int socket);
 
 #endif

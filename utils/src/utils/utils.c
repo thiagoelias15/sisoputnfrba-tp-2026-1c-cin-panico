@@ -99,12 +99,13 @@ int crear_conexion(char* ip, char* puerto) {
     freeaddrinfo(server_info);
     return socket_cliente;
 }
+// -----------------------------SERIALIZACION---------------------------------//
 
 void enviar_mensaje(char* mensaje, op_code codigo_operacion, int socket_cliente) {
 
     int tamaño_mensaje = strlen(mensaje) + 1;
     int cod_op = codigo_operacion; 
-    int tamaño_total = sizeof(int) * 2 + tamaño_mensaje;
+    int tamaño_total = sizeof(int) * 2 + tamaño_mensaje;holaj
     void* buffer = malloc(tamaño_total);
     int desplazamiento = 0;
 
@@ -119,6 +120,15 @@ void enviar_mensaje(char* mensaje, op_code codigo_operacion, int socket_cliente)
     send(socket_cliente, buffer, tamaño_total, 0);
 
     free(buffer);
+}
+//nuevo checkpoint 2
+void enviar_pcb(t_pcb* pcb,int socket,op_code cod_op){
+    void* buffer = malloc(sizeof(op_code)+ sizeof(t_pcb));
+    int desplazamiento = 0;
+    memcpy (buffer + desplazamiento, &cod_op, sizeof(op_code));
+    desplazamiento += sizeof(op_code);
+    memcpy(buffer + desplazamiento, pcb,sizeof(t_pcb));
+    send(socket,buffer,sizeof(op_code) + sizeof(t_pcb),0);
 }
 
 int recibir_operacion(int socket_cliente) {
@@ -152,4 +162,12 @@ char* recibir_mensaje(int socket_cliente) {
     }
     
     return buffer;
+}
+t_pcb* recibir_pcb(int socket){
+    t_pcb* pcb= malloc(sizeof(t_pcb));
+    if(recv(socket,pcb,sizeof(t_pcb),MSG_WAITALL)!= sizeof(t_pcb)){
+        free(pcb);
+        return NULL;
+    }
+return pcb;
 }
