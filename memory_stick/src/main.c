@@ -29,5 +29,5 @@ int main(int argc, char* argv[]) {
     close(fd_memoria);
     config_destroy(config);
     log_destroy(logger);
-     return 0;
+    return 0;
 }
