@@ -6,4 +6,9 @@
 - Conexiones del I/O
 - Conexiones Memory
 - Conexiones del Memory Stick
-- Conexiones del Scheduler
+- Checkpoint 2 utils
+
+## INCOMPLETO
+
+- checkpoint 2 todos los modulos xd
+

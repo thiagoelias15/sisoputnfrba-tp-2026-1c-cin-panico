@@ -37,7 +37,7 @@ typedef enum {
     CONTEXTO_PCB,
     INTERRUPCION,
     //Syscalls(peticiones de CPU a scheduler)
-    SYSCALL_SLEPP,
+    SYSCALL_SLEEP,
     SYSCALL_STDIN,
     SYSCALL_STDOUT,
     SYSCALL_MUTEX_CREATE,
