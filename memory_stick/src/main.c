@@ -64,9 +64,6 @@ int main(int argc, char* argv[]) {
     close(fd_memoria);
     config_destroy(config);
     log_destroy(logger);
-<<<<<<< HEAD
-=======
-    
->>>>>>> 51742375c65d6622d8e8bf478c0a4016f026a21a
+
     return 0;
 }
