@@ -5,19 +5,19 @@
    t_list* cola_new;
    t_list* cola_ready;
    t_list* cola_exec;
-   t_list* colar_block;
+   t_list* cola_block;
    t_list* cola_exit;
    
    //Mutex p
    pthread_mutex_t m_ready, m_new, m_block, m_exit; //evita que 2 hilos intenten intenter entrar a la cola ready al mismo tiempo, al entrar 1 tira pthread_mutex_t para bloquear la cola y hasta que no sale no se abre de nuevo la cola para otro hilo
    sem_t sem_procesos_ready; //avisa al scheduler que hay un proceso en la cola ready
-   t_dictionary* dic_mutex //guarda la info de los sem que se crean al hacer MUTEX_LOCK
+   t_dictionary* dic_mutex; //guarda la info de los sem que se crean al hacer MUTEX_LOCK
    
    
    //Socket globales
    int fd_cpu = -1;
    int fd_memoria = -1;
-   int fd_io = -1;
+   t_dictionary* dic_interfaces; // Agenda o diccionario para guardar multiples IOs
    
    //leer configuracion cargada de que metodo utilizar(fifo,rr,etc)
    char* algoritmo_planificacion;
@@ -59,9 +59,10 @@
     cola_ready = list_create();
     cola_exec = list_create();
     cola_block = list_create();
-    cola_exti = list_create();
+    cola_exit = list_create();
 
     dic_mutex = dictionary_create();
+    dic_interfaces = dictionary_create(); // Creamos la agenda  o diccionario para ios vacía
 
     pthread_mutex_init(&m_ready, NULL);
     pthread_mutex_init(&m_new, NULL);
@@ -97,7 +98,7 @@
     pcb_inicial->eax = 0; pcb_inicial->ebx = 0; pcb_inicial->ecx = 0; pcb_inicial->edx = 0;
     pcb_inicial->si = 0; pcb_inicial->di = 0;
     
-    log_info(logger, "## (%d) Se crea el proceso - Estado: NEW",pcb-inicial->pid);
+    log_info(logger, "## (%d) Se crea el proceso - Estado: NEW",pcb_inicial->pid);
     //entrada NEW
     pthread_mutex_lock(&m_new);
     list_add(cola_new, pcb_inicial);
@@ -118,10 +119,10 @@
 
     // --------------------------Planificador a corto plazo-------------------------------------//
 
-    pthread hilo_planificador; //declaramos variable de tipo pthread llamada hilo_planificador
+    pthread_t hilo_planificador; //declaramos variable de tipo pthread_t llamada hilo_planificador
     pthread_create(&hilo_planificador, NULL, planificador_corto_plazo, NULL); /*creamos un hilo nuevo con estos 4 parametros
     &hilo_planificador es para guardar el ID del hilo creado,NULL es para que no haga nada especial solo configuracion estandar,planificador_corto_plazo es la funcion que va a ejecutar el hilo */
-    pthread_detach(hilo_planificaodor); //al crear un hilo linux deja vinculados el hilo nuevo al hilo main con detach desvinculamos los hilos para que el nuevo trabaje de forma independiente
+    pthread_detach(hilo_planificador); //al crear un hilo linux deja vinculados el hilo nuevo al hilo main con detach desvinculamos los hilos para que el nuevo trabaje de forma independiente
 
     // ------------------------------ SCHEDULER COMO SERVIDOR ------------------------------ //
 
@@ -131,7 +132,7 @@
    while(1){ //al poner while(1) ese uno es un TRUE osea siempre verdadero lo que permite que el while sea infinito
     int* socket_cliente = malloc(sizeof(int));
     *socket_cliente = esperar_cliente(fd_escucha);
-    pthread hilo_cliente;
+    pthread_t hilo_cliente;
     pthread_create(&hilo_cliente, NULL, atender_cliente, socket_cliente);
     pthread_detach(hilo_cliente);
    }
@@ -154,10 +155,10 @@ void* planificador_corto_plazo(void* arg){
                 pthread_create(&hilo_quantum,NULL,temporizador_quantum,pcb_a_ejecutar);
                 pthread_detach(hilo_quantum);
             }
-            return NULL;
            }
-
+           return NULL;
 }
+
 void* temporizador_quantum(void* arg){
     t_pcb* pcb = (t_pcb*)arg; //aca le decimos al compilador que trate a ese arg como un puntero a un pcb para leer el PID
     usleep(quantum_rr * 1000); //la funcion usleep espera una x cantidad de microsegundos y por mil para pasar esos microsegundos a milisegundos
@@ -200,13 +201,17 @@ void* atender_cliente(void* arg){
             list_add(cola_block, pcb_upd);
             pthread_mutex_unlock(&m_block);
             
-            if(fd_io != -1){
-                enviar_mensaje("SLEEP", SYSCALL_SLEEP,fd_io);
-                send(fd_io,&tiempo_ms,sizeof(int),0);
-                send(fd_io,&(pcb_upd-<pid),sizeof(int),0);
-              }
-              sem_post(&sem_procesos_ready);
-              break;
+            if(dictionary_has_key(dic_interfaces, "SLEEP")){
+                // Buscamos el enchufe específico del SLEEP
+                int socket_sleep = (int)(intptr_t)dictionary_get(dic_interfaces, "SLEEP");
+                enviar_mensaje("SLEEP", SYSCALL_SLEEP, socket_sleep);
+                send(socket_sleep, &tiempo_ms, sizeof(int), 0);
+                send(socket_sleep, &(pcb_upd->pid), sizeof(int), 0);
+            } else {
+                log_error(logger, "La interfaz SLEEP no está conectada.");
+            }
+            sem_post(&sem_procesos_ready);
+            break;
             }
 
             case SYSCALL_MUTEX_CREATE: { //mutex create crea una cola con un nombre determinado y guarda en dictionary todas esas colas que va creando para no repetir
@@ -227,12 +232,12 @@ void* atender_cliente(void* arg){
                     queue_push(q, pcb_upd);
                     enviar_pcb(pcb_upd, fd_cpu, CONTEXTO_PCB); 
                 }else{
-                    log_info(logger, "## (%d) Psa del estado de EXEC al estado BLOCK"pcb_upd->pid);
-                    pthre_mutex_lock(&m_block);
+                    log_info(logger, "## (%d) Psa del estado de EXEC al estado BLOCK", pcb_upd->pid);
+                    pthread_mutex_lock(&m_block);
                     list_add(cola_block,pcb_upd); //movemos el proceso a la cola block porque tiene que esperar
                     pthread_mutex_unlock(&m_block);
-                    queue_push(q, pcb_upd) //pone el proceso en el final de la cola del mutex 
-                    sem__post(&sem_procesos_ready); //como la CPU ahora esta libre le avisa al scheduler que mande otro proceso a ejecutar
+                    queue_push(q, pcb_upd); //pone el proceso en el final de la cola del mutex 
+                    sem_post(&sem_procesos_ready); //como la CPU ahora esta libre le avisa al scheduler que mande otro proceso a ejecutar
                 }
             free(m_name);
             break;
@@ -265,14 +270,18 @@ void* atender_cliente(void* arg){
                 pthread_mutex_lock(&m_block); // Bloquea acceso a cola de bloqueados
                 list_add(cola_block, pcb_upd); // Agrega el proceso a la cola BLOCK
                 pthread_mutex_unlock(&m_block); // Libera el mutex de la cola
-                if (fd_io != -1){
-                   enviar_mensaje("STDIN", SYSCALL_STDIN, fd_io);
-                   send(fd_io, &tam, sizeof(int), 0);
-                   send(fd_io, &dir, sizeof(int), 0);
-                   send(fd_io, &(pcb_upd->pid), sizeof(int), 0);
+                
+                if(dictionary_has_key(dic_interfaces, "STDIN")){
+                int socket_stdin = (int)(intptr_t)dictionary_get(dic_interfaces, "STDIN");
+                enviar_mensaje("STDIN", SYSCALL_STDIN, socket_stdin);
+                send(socket_stdin, &tam, sizeof(int), 0);
+                send(socket_stdin, &dir, sizeof(int), 0);
+                send(socket_stdin, &(pcb_upd->pid), sizeof(int), 0);
+            } else {
+                log_error(logger, "La interfaz STDIN no está conectada.");
             }
-                sem_post(&sem_procesos_ready); // Despierta al planificador
-                break;
+            sem_post(&sem_procesos_ready);
+            break;
             }
             
             case SYSCALL_STDOUT:{
@@ -284,42 +293,53 @@ void* atender_cliente(void* arg){
                 pthread_mutex_lock(&m_block); // Protege la cola de bloqueados
                 list_add(cola_block, pcb_upd); // Mueve el PCB a estado bloqueado
                 pthread_mutex_unlock(&m_block); // Libera la protección de la cola
-                /*Si hay una interfaz conectada (fd_io != -1), el Kernel le envía un mensaje avisando que hay una tarea de STDOUT. 
+                /*Si hay una interfaz conectada , el Kernel le envía un mensaje avisando que hay una tarea de STDOUT. 
                 Le pasa el tamaño, la dirección y el PID del proceso para que la interfaz sepa a quién pertenece la operación*/
-                if(fd_io != -1){
-                    enviar_mensaje("STDOUT", SYSCALL_STDOUT, fd_io);
-                    send(fd_io, &tam, sizeof(int), 0);
-                    send(fd_io, &dir, sizeof(int), 0);
-                    send(fd_io. &(pcb_upd->pid), sizeof(int), 0);
-                }
-                sem_post(&sem_procesos_ready); // se manda a ejectutar al siguiente proceso que esta esperando en la cola READY
-                break;
+                if(dictionary_has_key(dic_interfaces, "STDOUT")){
+                int socket_stdout = (int)(intptr_t)dictionary_get(dic_interfaces, "STDOUT");
+                enviar_mensaje("STDOUT", SYSCALL_STDOUT, socket_stdout);
+                send(socket_stdout, &tam, sizeof(int), 0);
+                send(socket_stdout, &dir, sizeof(int), 0);
+                send(socket_stdout, &(pcb_upd->pid), sizeof(int), 0);
+            } else {
+                log_error(logger, "La interfaz STDOUT no está conectada.");
+            }
+            sem_post(&sem_procesos_ready);
+            break;
             }
         
         default: break; // si no es ninguno de los anteriores casos sale del switch y sigue con el codigo que esta abajo
         }
     }
-    }else if(strcmp(id_recibida, "IO")== 0){ // Si el módulo que se conectó se identifica como una interfaz de Entrada/Salida
-        fd_io = socket_cliente;
-        log_info(logger, "## Interfaz de IO conectada");
+    }else{
+        //si no es la CPU es una de las IOs
+        log_info(logger,"## Interfaz de IO %s conectada", id_recibida); 
+        
+        //la anotamos en el diccionario usando su nombre como Clave y su socket como valor
+        dictionary_put(dic_interfaces, id_recibida, (void*)(intptr_t)socket_cliente); 
         while(1){
-            op_code cod_op = recibir_operacion(fd_io); // Esperamos a que la interfaz nos mande una operación
-            if(cod_op == -1)break;// Si se desconecta la interfaz, salimos del bucle
-            if(cod_op == MENSAJE){
-                char* resp = recibir_mensaje(fd_io);
-                if(strcmp(resp, "FIN_IO")== 0){// Si el mensaje confirma que el proceso terminó su tarea de IO
-                    int pid_fin; // Recibimos de forma binaria el PID del proceso que finalizó
-                    recv(fd_io,&pid_fin,sizeof(int), MSG_WAITALL);
-                    log_info(logger,"## (%d) finalizo IO y paso a READY",pid_fin);
-                    mover_a_ready(pid_fin); // Movemos el proceso de la cola BLOCK a la cola READY
-                }
-            free(resp);
+            //Usamos socket_cliente y no fd_io como antes 
+            op_code cod_op = recibir_operacion(socket_cliente);
+            if(cod_op == -1){
+                log_warning(logger, "Se desconecto la IO %s", id_recibida);
+                dictionary_remove(dic_interfaces, id_recibida); //como hubo error borramos esa IO del dicccionario
+                break;
             }
+           if(cod_op == MENSAJE){
+            char* resp = recibir_mensaje(socket_cliente);
+            if(strcmp(resp, "FIN_IO")== 0){
+                int pid_fin;
+                recv(socket_cliente, &pid_fin, sizeof(int), MSG_WAITALL);
+                log_info(logger, "## (%d) finalizo IO y paso a READY",pid_fin);
+                mover_a_ready(pid_fin);
+            }
+         free(resp);  
         }
+        }
+
     }
     free(id_recibida);
     return NULL;
-    
 }
 //--------------------------------- Auxiliares de planificacion---------------------------/
 
@@ -329,7 +349,7 @@ void mover_a_ready(int pid_buscado){ //La función entra a la "sala de espera" d
     //bloqueamos la cola BLOCK para evitar "choques" o que entren nuevos hilos a la cola
     pthread_mutex_lock(&m_block);
     for(int i = 0; i< list_size(cola_block);i++){ // va a recorrer la lista buscando el PID que necesitamos
-       t_pcb* p= list_get(cola_block,i) //obtenemos el PCB en la posicion i
+       t_pcb* p= list_get(cola_block,i); //obtenemos el PCB en la posicion i
         if(p->pid == pid_buscado){
             //si coincide el PID, lo extraemos de la lista de bloqueados
             pcb_a_mover = list_remove(cola_block,i);
@@ -338,7 +358,7 @@ void mover_a_ready(int pid_buscado){ //La función entra a la "sala de espera" d
     }
     pthread_mutex_unlock(&m_block);
     if(pcb_a_mover != NULL){ //si encontro el proceso lo mete en la cola de listos
-        pcb_a_mover->estado = READYL; //actualizamods el estado interno del PCB
+        pcb_a_mover->estado = READY; //actualizamods el estado interno del PCB
         //metemos a la cola de READY
         pthread_mutex_lock(&m_ready);
         list_add(cola_ready, pcb_a_mover);
@@ -346,6 +366,3 @@ void mover_a_ready(int pid_buscado){ //La función entra a la "sala de espera" d
         sem_post(&sem_procesos_ready); //avisamos que hay un proceso nuevo para mandar al cpu
     }
     }
-
-
-

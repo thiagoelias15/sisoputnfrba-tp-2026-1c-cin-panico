@@ -39,7 +39,7 @@ while(1){
    if(cod_op == -1){
     log_error(logger, "El scheduler se desconecto de forma abrupta.Cerrando conexion");
    break; // ponemos break para romper el ciclo infinto y que salga para ir directo a la limpieza
-
+   }
 
 // segun el codigo de operacion que nos mando el scheduler la IO decide que tiene que hacer
 switch(cod_op){
