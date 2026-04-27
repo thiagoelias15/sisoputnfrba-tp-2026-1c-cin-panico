@@ -27,7 +27,7 @@ int main(int argc, char* argv[]) {
      // Handshake: basicamente se "presenta la IO con el scheduler usando el id del config"
         enviar_mensaje(mi_id, MENSAJE, fd_scheduler);
         log_info(logger, "I/O conectada al Scheduler correctamente."); 
-    }
+    
     
    //-------------------------------------------- Bucle de conexion con el scheduler ----------------------
     //con while(1) se queda en un bucle infinito esperando que el scheduler le asigne algo para hacer
@@ -57,7 +57,7 @@ switch(cod_op){
         recv(fd_scheduler, &tam,sizeof(int),MSG_WAITALL);  //como sabemos WAITALL hace que el socket espere a recibir todos los bytes ya que a veces llegan por ejemplo 2 bytes y con una diferencia de milisegundos los otros 2 pero el socket ya guardo solo los primero 2 bytes esto nos evita ese error 
         recv(fd_scheduler,&dir, sizeof(int),MSG_WAITALL);
         recv(fd_scheduler,&pid, sizeof(int),MSG_WAITALL); //PID es el id del proceso(un numero entero para que sea mas simple el manejo de tantos procesos al mismo tiempo)
-        log_info(logger, "## (%d) Peticion STDOUT recibida. Tamaño a leer: %d", pid,tam,dir);
+        log_info(logger, "## (%d) Peticion STDOUT recibida. Tamaño a leer: %d, Direccion: %d", pid,tam,dir);
         // como imprimir por pantalla o buscar en un disco duro, las acciones que hace la IO, son muy lentas tenemos que frenar al hilo por un tiempo para darle tiempo a que haga lo que se le pidio
        
         usleep(1000 * 1000); // esto seria un millon de microsegundos = 1 segundo si vemos que dsp falla se puede poner mas alizó STDOUT, aviso enviado al Scheduler.", pid);

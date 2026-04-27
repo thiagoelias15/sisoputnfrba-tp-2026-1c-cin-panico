@@ -48,7 +48,7 @@
     char* puerto_escucha = config_get_string_value(config, "PUERTO_ESCUCHA");
     char* mi_id = config_get_string_value(config, "ID_MODULO");
     algoritmo_planificacion = config_get_string_value(config, "PLANIFICATION_ALGORITHM");
-    quantum_rr = config_get_string_value(config, "RR_QUANTUM");
+    quantum_rr = config_get_int_value(config, "RR_QUANTUM");
     
     // Se inicia el Logger
     t_log* logger = log_create("Scheduler.log","SCHEDULER",1,LOG_LEVEL_INFO);
@@ -172,7 +172,7 @@ void* atender_cliente(void* arg){
     int socket_cliente = *(int*)arg; // arg es un puntero que apunta a la direccion de memoria donde el main guardo el numero de socket y (int*)*arg le dice al compilador que trate a ese puntero como un entero
     free(arg);
 
-    op_code cod_op = recibir_operacion(socket_cliente);
+    recibir_operacion(socket_cliente);
     char* id_recibida = recibir_mensaje(socket_cliente);
     
     if(strcmp(id_recibida, "CPU")== 0){
@@ -228,11 +228,11 @@ void* atender_cliente(void* arg){
                  char* m_name = recibir_mensaje(fd_cpu);
                  t_queue* q = dictionary_get(dic_mutex, m_name);
                  if(queue_is_empty(q)){ //si la cola esta vacia el proceso se mete primero y se lo devuelve a la cpu para que siga corriendo, sino esta vacio el prcoceso pierde su turno actual de cpu
-                    log_info(logger, "## (%d) Toma el mutex %s",pcb_upd->pid);
+                    log_info(logger, "## (%d) Toma el mutex %s",pcb_upd->pid, m_name);
                     queue_push(q, pcb_upd);
                     enviar_pcb(pcb_upd, fd_cpu, CONTEXTO_PCB); 
                 }else{
-                    log_info(logger, "## (%d) Psa del estado de EXEC al estado BLOCK", pcb_upd->pid);
+                    log_info(logger, "## (%d) Pasa del estado de EXEC al estado BLOCK", pcb_upd->pid);
                     pthread_mutex_lock(&m_block);
                     list_add(cola_block,pcb_upd); //movemos el proceso a la cola block porque tiene que esperar
                     pthread_mutex_unlock(&m_block);

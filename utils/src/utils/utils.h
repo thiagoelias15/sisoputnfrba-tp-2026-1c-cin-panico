@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
@@ -42,14 +43,26 @@ typedef enum {
     SYSCALL_STDOUT,
     SYSCALL_MUTEX_CREATE,
     SYSCALL_MUTEX_LOCK,
+    SYSCALL_MUTEX_UNLOCK,
     SYSCALL_EXIT
 } op_code;
+
+typedef enum { //creamos el diccionario de estados posibles 
+    NEW,
+    READY,
+    EXEC,
+    BLOCK,
+    EXIT
+}t_estado; 
+
+
 
 // estructura del PCB(process control block)
 typedef struct{
 uint32_t pid;      
     uint32_t pc;       
     
+    t_estado estado;
     // Registros de 1 byte
     uint8_t ax, bx, cx, dx;
 
