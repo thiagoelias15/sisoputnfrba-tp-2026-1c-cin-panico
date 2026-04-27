@@ -5,7 +5,6 @@ t_config* iniciar_config(char* path_config) {
     t_config* nuevo_config = config_create(path_config);
 
     if (nuevo_config == NULL) {
-
         printf("Error no se pudo leer el archivo %s\n", path_config);
         exit(EXIT_FAILURE);
     }
@@ -18,7 +17,6 @@ t_config* iniciar_config(char* path_config) {
 int iniciar_servidor(char* puerto) {
 
     if (puerto != NULL) {
-
         // Borra de los archivos de texto (configs) si quedo un espacio,\n, o caracteres invisibles al final de la linea de la terminal
         puerto[strcspn(puerto, "\r\n ;")] = 0;
     }
@@ -39,7 +37,6 @@ int iniciar_servidor(char* puerto) {
     socket_servidor = socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol);
 
     if (socket_servidor == -1) {
-
         freeaddrinfo(servinfo);
         return -1;
     }
@@ -50,7 +47,6 @@ int iniciar_servidor(char* puerto) {
 
     // 3. ASOCIAR AL PUERTO (Bind)
     if (bind(socket_servidor, servinfo->ai_addr, servinfo->ai_addrlen) == -1) {
-        
         perror("Error en bind");
         close(socket_servidor);
         freeaddrinfo(servinfo);
@@ -61,7 +57,6 @@ int iniciar_servidor(char* puerto) {
 
     // 4. ESCUCHAR
     if (listen(socket_servidor, SOMAXCONN) == -1) {
-        
         perror("Error en listen");
         return -1;
     }
@@ -70,7 +65,6 @@ int iniciar_servidor(char* puerto) {
 }
 
 int esperar_cliente(int socket_servidor) {
-
     int socket_cliente = accept(socket_servidor, NULL, NULL);
     return socket_cliente;
 }
@@ -91,7 +85,6 @@ int crear_conexion(char* ip, char* puerto) {
     int socket_cliente = socket(server_info->ai_family, server_info->ai_socktype, server_info->ai_protocol);
 
     if (connect(socket_cliente, server_info->ai_addr, server_info->ai_addrlen) == -1) {
-
         freeaddrinfo(server_info);
         return -1;
     }
@@ -99,13 +92,14 @@ int crear_conexion(char* ip, char* puerto) {
     freeaddrinfo(server_info);
     return socket_cliente;
 }
+
 // -----------------------------SERIALIZACION---------------------------------//
 
 void enviar_mensaje(char* mensaje, op_code codigo_operacion, int socket_cliente) {
 
     int tamaño_mensaje = strlen(mensaje) + 1;
     int cod_op = codigo_operacion; 
-    int tamaño_total = sizeof(int) * 2 + tamaño_mensaje;holaj
+    int tamaño_total = sizeof(int) * 2 + tamaño_mensaje;
     void* buffer = malloc(tamaño_total);
     int desplazamiento = 0;
 
@@ -121,33 +115,34 @@ void enviar_mensaje(char* mensaje, op_code codigo_operacion, int socket_cliente)
 
     free(buffer);
 }
+
 //nuevo checkpoint 2
-void enviar_pcb(t_pcb* pcb,int socket,op_code cod_op){
+void enviar_pcb(t_pcb* pcb, int socket, op_code cod_op){
     void* buffer = malloc(sizeof(op_code)+ sizeof(t_pcb));
     int desplazamiento = 0;
-    memcpy (buffer + desplazamiento, &cod_op, sizeof(op_code));
+    
+    memcpy(buffer + desplazamiento, &cod_op, sizeof(op_code));
     desplazamiento += sizeof(op_code);
-    memcpy(buffer + desplazamiento, pcb,sizeof(t_pcb));
-    send(socket,buffer,sizeof(op_code) + sizeof(t_pcb),0);
+    
+    memcpy(buffer + desplazamiento, pcb, sizeof(t_pcb));
+    
+    send(socket, buffer, sizeof(op_code) + sizeof(t_pcb), 0);
+    free(buffer); // Agregué el free para que no tengas memory leaks (fugas de memoria)
 }
 
 int recibir_operacion(int socket_cliente) {
-
     int cod_op;
-
     if (recv(socket_cliente, &cod_op, sizeof(int), MSG_WAITALL) > 0) {
         return cod_op;
     }
     else {
-        
         close(socket_cliente);
         return -1;
     }
 }
 
 char* recibir_mensaje(int socket_cliente) {
-
-    int tamaño_mensaje;
+    int tamaño_mensaje; // Esta variable se te habia borrado con el copy-paste
 
     if (recv(socket_cliente, &tamaño_mensaje, sizeof(int), MSG_WAITALL) != sizeof(int)) {
         return NULL;
@@ -156,18 +151,20 @@ char* recibir_mensaje(int socket_cliente) {
     char* buffer = malloc(tamaño_mensaje);
 
     if (recv(socket_cliente, buffer, tamaño_mensaje, MSG_WAITALL) != tamaño_mensaje) {
-        
         free(buffer);
         return NULL;
     }
     
     return buffer;
 }
+
 t_pcb* recibir_pcb(int socket){
-    t_pcb* pcb= malloc(sizeof(t_pcb));
-    if(recv(socket,pcb,sizeof(t_pcb),MSG_WAITALL)!= sizeof(t_pcb)){
+    t_pcb* pcb = malloc(sizeof(t_pcb));
+    
+    if(recv(socket, pcb, sizeof(t_pcb), MSG_WAITALL) != sizeof(t_pcb)){
         free(pcb);
         return NULL;
     }
-return pcb;
+    
+    return pcb;
 }
