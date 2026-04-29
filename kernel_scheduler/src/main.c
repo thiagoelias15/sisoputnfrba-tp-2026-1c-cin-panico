@@ -296,7 +296,7 @@ void* atender_cliente(void* arg){
                 /*Si hay una interfaz conectada , el Kernel le envía un mensaje avisando que hay una tarea de STDOUT. 
                 Le pasa el tamaño, la dirección y el PID del proceso para que la interfaz sepa a quién pertenece la operación*/
                 if(dictionary_has_key(dic_interfaces, "STDOUT")){
-                int socket_stdout = (int)(intptr_t)dictionary_get(dic_interfaces, "STDOUT");
+                int socket_stdout = (int)(intptr_t)dictionary_get(dic_interfaces, "STDOUT"); // intptr_t es de una biblioteca stdin.h y lo que hace es una variable que se asegura que el dato tenga el mismo tamaño en bytes que el puntero para que no tire error
                 enviar_mensaje("STDOUT", SYSCALL_STDOUT, socket_stdout);
                 send(socket_stdout, &tam, sizeof(int), 0);
                 send(socket_stdout, &dir, sizeof(int), 0);
