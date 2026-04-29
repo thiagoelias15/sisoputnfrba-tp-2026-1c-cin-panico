@@ -1,4 +1,7 @@
-#include <utils/utils.h>
+#include "main.h"
+
+// Declaración real del logger global que pusimos en main.h
+t_log* logger;
 
 int main(int argc, char* argv[]) {
 
@@ -9,23 +12,19 @@ int main(int argc, char* argv[]) {
     }
 
     // Se inicializan las herramientas de las commons y se extraen los parámetros correspondientes al config
-    t_config* config = iniciar_config(argv[1]);
-
-    char* ip_sched = config_get_string_value(config, "IP_SCHEDULER");
-    char* puerto_sched = config_get_string_value(config, "PUERTO_SCHEDULER");
-    char* mi_id = config_get_string_value(config,"ID_MODULO");
+    cargar_configuracion_io(argv[1]);
 
     // Se inicia el Logger
-    t_log* logger = log_create("io.log","IO",1,LOG_LEVEL_INFO);
+    logger = log_create("io.log", io_config.id_modulo, 1, LOG_LEVEL_INFO);
     log_info(logger, "Iniciando modulo de I/O ");
 
     // ------------------------------ CONEXIONES ------------------------------ //
 
-    int fd_scheduler = crear_conexion(ip_sched,puerto_sched);
+    int fd_scheduler = crear_conexion(io_config.ip_sched, io_config.puerto_sched);
 
     if(fd_scheduler != -1) {
      // Handshake: basicamente se "presenta la IO con el scheduler usando el id del config"
-        enviar_mensaje(mi_id, MENSAJE, fd_scheduler);
+        enviar_mensaje(io_config.id_modulo, MENSAJE, fd_scheduler);
         log_info(logger, "I/O conectada al Scheduler correctamente."); 
     
     
@@ -139,7 +138,7 @@ switch(cod_op){
        // ------------------------------ LIMPIEZA DE LA MEMORIA ------------------------------ //
 
     close(fd_scheduler);
-    config_destroy(config);
+    destruir_configuracion_io();
     log_destroy(logger);
 
     return 0;
