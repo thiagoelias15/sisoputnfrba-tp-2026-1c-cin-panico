@@ -1,8 +1,8 @@
-#include "serializacion.h"
+#include "utils/serializacion/serializacion.h"
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
-
+// -----------------------------SERIALIZACION---------------------------------//
 void enviar_mensaje(char* mensaje, op_code codigo_operacion, int socket_cliente) {
     int tamaño_mensaje = strlen(mensaje) + 1;
     int cod_op = codigo_operacion; 

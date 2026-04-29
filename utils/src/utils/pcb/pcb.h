@@ -2,7 +2,7 @@
 #define PCB_H_
 
 #include <stdint.h>
-
+//creamos el diccionario de estados posibles
 typedef enum { 
     NEW,
     READY,
@@ -10,7 +10,7 @@ typedef enum {
     BLOCK,
     EXIT
 } t_estado;
-
+// estructura del PCB(process control block)
 typedef struct {
     uint32_t pid;      
     uint32_t pc;       

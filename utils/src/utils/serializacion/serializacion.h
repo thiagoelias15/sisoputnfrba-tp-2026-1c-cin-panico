@@ -1,8 +1,22 @@
-#ifndef SERIALIZACION_H_
-#define SERIALIZACION_H_
+#ifndef UTILS_SERIALIZACION_H_
+#define UTILS_SERIALIZACION_H_
 
-#include "pcb.h" // Para usar t_pcb
+#include "utils/pcb/pcb.h"// Para usar t_pcb
 #include <stdint.h>
+#include <unistd.h>
+#include <sys/socket.h>
+
+// Códigos para avisarle al que recibe que tipo de paquete estamos mandando
+
+/*
+Creamos una variable typedef(op_code) de tipo enum, la cual asigna números enteros a palabras al compilar.
+
+MENSAJE = 0
+PAQUETE = 1
+PETICION_LECTURA = 2
+DATO_MEMORIA = 3
+...
+*/
 
 typedef enum {
     MENSAJE,
@@ -11,6 +25,7 @@ typedef enum {
     SOLICITUD_INSTRUCCION,
     CONTEXTO_PCB,
     INTERRUPCION,
+    //Syscalls(peticiones de CPU a scheduler)
     SYSCALL_SLEEP,
     SYSCALL_STDIN,
     SYSCALL_STDOUT,
@@ -24,10 +39,10 @@ typedef enum {
 
 void enviar_mensaje(char* mensaje, op_code codigo_operacion, int socket_cliente);
 char* recibir_mensaje(int socket_cliente);
-
+//funciones para el intercambio de contextos
 void enviar_pcb(t_pcb* pcb, int socket, op_code cod_op);
 t_pcb* recibir_pcb(int socket);
 
 int recibir_operacion(int socket_cliente);
 
-#endif // SERIALIZACION_H_
+#endif 

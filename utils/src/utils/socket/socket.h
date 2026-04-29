@@ -1,5 +1,5 @@
-#ifndef SOCKET_H_
-#define SOCKET_H_
+#ifndef UTILS_SOCKET_H_
+#define UTILS_SOCKET_H_
 
 // Declaraciones para manejo de sockets
 
