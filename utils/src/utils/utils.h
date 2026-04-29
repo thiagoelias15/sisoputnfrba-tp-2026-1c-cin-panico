@@ -7,7 +7,10 @@
 #include <stdint.h>
 #include <pthread.h>
 #include <semaphore.h>
-
+#include "utils/pcb/pcb.h"
+#include "utils/socket/socket.h"
+#include "utils/serializacion/serializacion.h"
+#include "utils/config/config.h"
 
 
 #endif 

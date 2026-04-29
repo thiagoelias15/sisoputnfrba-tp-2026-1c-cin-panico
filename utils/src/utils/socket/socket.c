@@ -1,4 +1,4 @@
-#include "socket.h"
+#include "utils/socket/socket.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -6,9 +6,9 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <unistd.h>
-
+// ------------------------------ FUNCIONES DE SERVIDOR ------------------------------ //
 int iniciar_servidor(char* puerto) {
-    if (puerto != NULL) puerto[strcspn(puerto, "\r\n ;")] = 0;
+    if (puerto != NULL) puerto[strcspn(puerto, "\r\n ;")] = 0;// Borra de los archivos de texto (configs) si quedo un espacio,\n, o caracteres invisibles al final de la linea de la terminal
 
     int socket_servidor;
     struct addrinfo hints, *servinfo;
@@ -18,16 +18,16 @@ int iniciar_servidor(char* puerto) {
     hints.ai_flags = AI_PASSIVE;
 
     if (getaddrinfo(NULL, puerto, &hints, &servinfo) != 0) return -1;
-
+// 1. CREAR EL SOCKET
     socket_servidor = socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol);
     if (socket_servidor == -1) {
         freeaddrinfo(servinfo);
         return -1;
     }
-
+// 2. Se elimina el tiempo de espera para el siguiente BIND al interrumpir una conexión con el comando ^C
     int yes = 1;
     setsockopt(socket_servidor, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
-
+// 3. ASOCIAR AL PUERTO (Bind)
     if (bind(socket_servidor, servinfo->ai_addr, servinfo->ai_addrlen) == -1) {
         perror("Error en bind");
         close(socket_servidor);
@@ -36,7 +36,7 @@ int iniciar_servidor(char* puerto) {
     }
 
     freeaddrinfo(servinfo);
-
+// 4. ESCUCHAR
     if (listen(socket_servidor, SOMAXCONN) == -1) {
         perror("Error en listen");
         return -1;
@@ -49,7 +49,7 @@ int esperar_cliente(int socket_servidor) {
     int socket_cliente = accept(socket_servidor, NULL, NULL);
     return socket_cliente;
 }
-
+// ------------------------------ FUNCIONES DE CLIENTE ------------------------------ //
 int crear_conexion(char* ip, char* puerto) {
     struct addrinfo hints, *server_info;
     memset(&hints, 0, sizeof(hints));

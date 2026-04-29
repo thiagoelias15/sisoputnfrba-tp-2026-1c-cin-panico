@@ -1,68 +1,42 @@
-#include <utils/utils.h>
-
-
-    //------------------------------ Variables globales(estados y sincronizacion)--------------------//
-   t_list* cola_new;
-   t_list* cola_ready;
-   t_list* cola_exec;
-   t_list* cola_block;
-   t_list* cola_exit;
-   
-   //Mutex p
-   pthread_mutex_t m_ready, m_new, m_block, m_exit; //evita que 2 hilos intenten intenter entrar a la cola ready al mismo tiempo, al entrar 1 tira pthread_mutex_t para bloquear la cola y hasta que no sale no se abre de nuevo la cola para otro hilo
-   sem_t sem_procesos_ready; //avisa al scheduler que hay un proceso en la cola ready
-   t_dictionary* dic_mutex; //guarda la info de los sem que se crean al hacer MUTEX_LOCK
-   
-   
-   //Socket globales
-   int fd_cpu = -1;
-   int fd_memoria = -1;
-   t_dictionary* dic_interfaces; // Agenda o diccionario para guardar multiples IOs
-   
-   //leer configuracion cargada de que metodo utilizar(fifo,rr,etc)
-   char* algoritmo_planificacion;
-   int quantum_rr;
-   t_log* logger;
+#include "main.h"
+// Definición de variables globales(en el main.h con extern solo le avisabamos al compiladro que existian pero no estaban definidas)
+t_list* cola_new;
+t_list* cola_ready;
+t_list* cola_exec;
+t_list* cola_block;
+t_list* cola_exit;
+pthread_mutex_t m_ready, m_new, m_block, m_exit;
+sem_t sem_procesos_ready;
+t_dictionary* dic_mutex;
+t_dictionary* dic_interfaces;
+int fd_cpu = -1;
+int fd_memoria = -1;
+t_log* logger;
    
 
-   //firmas de funciones
-   void* atender_cliente(void* arg);
-   void* planificador_corto_plazo(void* arg);
-   void* temporizador_quantum(void* arg);
-   void mover_a_ready(int pid_buscado);
 
    int main(int argc,char* argv[]) {
   
     // Se verifica la información en el config
-   if(argc<3) { //<3 porque ahora tenemos que ponerle el path del proceso principal 
+   if(argc<2) {  
 
         printf("[ERROR] Mal ejecutado");
         return EXIT_FAILURE; 
     }
 
     // Se carga el config, extrayendo la información necesaria para la conexión de módulos.
-    t_config* config = iniciar_config(argv[1]);
-
-    char* ip_mem = config_get_string_value(config, "IP_MEMORIA");
-    char* port_mem = config_get_string_value(config, "PUERTO_MEMORIA");
-    char* puerto_escucha = config_get_string_value(config, "PUERTO_ESCUCHA");
-    char* mi_id = config_get_string_value(config, "ID_MODULO");
-    algoritmo_planificacion = config_get_string_value(config, "PLANIFICATION_ALGORITHM");
-    quantum_rr = config_get_int_value(config, "RR_QUANTUM");
+    cargar_configuracion_kernel(argv[1]);
+    logger = log_create("Scheduler.log", "SCHEDULER", 1, LOG_LEVEL_INFO);
+    log_info(logger, "Iniciando Scheduler con algoritmo: %s", kernel_config.algoritmo_planificacion);
     
-    // Se inicia el Logger
-    t_log* logger = log_create("Scheduler.log","SCHEDULER",1,LOG_LEVEL_INFO);
-    log_info(logger,"Iniciando Scheduler");
-
-    //------------------------------- Inicializacion de estructuras--------------------------
+  // 2. INICIALIZAMOS ESTRUCTURAS
     cola_new = list_create();
     cola_ready = list_create();
     cola_exec = list_create();
     cola_block = list_create();
     cola_exit = list_create();
-
     dic_mutex = dictionary_create();
-    dic_interfaces = dictionary_create(); // Creamos la agenda  o diccionario para ios vacía
+    dic_interfaces = dictionary_create();
 
     pthread_mutex_init(&m_ready, NULL);
     pthread_mutex_init(&m_new, NULL);
@@ -72,18 +46,14 @@
 
     // ------------------------------ SCHEDULER COMO CLIENTE ------------------------------ //
 
-    int fd_memoria = crear_conexion(ip_mem,port_mem);
-
-    if(fd_memoria !=-1) {
-
-        enviar_mensaje(mi_id, MENSAJE, fd_memoria);
-        log_info(logger, "Scheduler conectado a la memoria con ID: %s",mi_id);
-
-    }
-    else {
-
-        log_error(logger,"Fallo en la conexión a la memoria: Kernel Memory no se encuentra activo");
-        return EXIT_FAILURE; // Retorna error si la memoria no esta prendida.
+  // 3. CONEXIÓN A MEMORIA (Usando nuestra esctuctura config)el . indica que ingresamos o tomamos dicho campo de un determinado struct
+    fd_memoria = crear_conexion(kernel_config.ip_memoria, kernel_config.puerto_memoria);
+    if(fd_memoria != -1) {
+        enviar_mensaje(kernel_config.id_modulo, MENSAJE, fd_memoria);
+        log_info(logger, "Scheduler conectado a la memoria con ID: %s", kernel_config.id_modulo);
+    } else {
+        log_error(logger, "Fallo en la conexión a la memoria");
+        return EXIT_FAILURE; 
     }
 
     //------------------------ Planificacion a largo plazo(proceso 0 o inical) ---------------------------------------
@@ -126,7 +96,7 @@
 
     // ------------------------------ SCHEDULER COMO SERVIDOR ------------------------------ //
 
-    int fd_escucha = iniciar_servidor(puerto_escucha);
+    int fd_escucha = iniciar_servidor(kernel_config.puerto_escucha);
     log_info(logger, "Servidor del scheduler encendido. Escuchando CPUs e IOs");
 
    while(1){ //al poner while(1) ese uno es un TRUE osea siempre verdadero lo que permite que el while sea infinito
@@ -136,6 +106,7 @@
     pthread_create(&hilo_cliente, NULL, atender_cliente, socket_cliente);
     pthread_detach(hilo_cliente);
    }
+   destruir_configuracion_kernel();
    return 0;
 }
    
@@ -150,7 +121,7 @@ void* planificador_corto_plazo(void* arg){
             log_info(logger, "## (%d) Pasa del estado READY al estado EXEC",pcb_a_ejecutar->pid);
             //manda el pcb al cpu a ejecutar
             enviar_pcb(pcb_a_ejecutar, fd_cpu, CONTEXTO_PCB);
-            if(strcmp(algoritmo_planificacion, "RR")== 0){
+            if(strcmp(kernel_config.algoritmo_planificacion, "RR")== 0){
                 pthread_t hilo_quantum;
                 pthread_create(&hilo_quantum,NULL,temporizador_quantum,pcb_a_ejecutar);
                 pthread_detach(hilo_quantum);
@@ -161,7 +132,7 @@ void* planificador_corto_plazo(void* arg){
 
 void* temporizador_quantum(void* arg){
     t_pcb* pcb = (t_pcb*)arg; //aca le decimos al compilador que trate a ese arg como un puntero a un pcb para leer el PID
-    usleep(quantum_rr * 1000); //la funcion usleep espera una x cantidad de microsegundos y por mil para pasar esos microsegundos a milisegundos
+    usleep(kernel_config.quantum_rr * 1000); //la funcion usleep espera una x cantidad de microsegundos y por mil para pasar esos microsegundos a milisegundos
     log_info(logger,"## (%d) Desalojo de quantum",pcb->pid);
     enviar_mensaje("INTERRUPCION_RR",INTERRUPCION,fd_cpu); //aca el scheduler le pide a la cpu que frene la ejecucion del procesos y se lo devuelva
     return NULL;
