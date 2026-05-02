@@ -1,4 +1,8 @@
-#include <utils/utils.h>
+#include "main.h"
+#include <stdio.h>
+#include <stdlib.h>
+
+t_log* logger;
 
 int main(int argc, char* argv[]) {
 
@@ -10,24 +14,19 @@ int main(int argc, char* argv[]) {
     
     // Se inicializan las herramientas de las commons y se extraen los parámetros correspondientes del config
 
-    t_config* config = iniciar_config(argv[1]);
-
-    char* ip_mem = config_get_string_value(config, "IP_MEMORIA");
-    char* puerto_mem = config_get_string_value(config, "PUERTO_MEMORIA");
-    char*mi_id = config_get_string_value(config,"ID_MODULO");
-
+    cargar_configuracion_ms(argv[1]);
+    
     // Se inicia el Logger
-    t_log* logger = log_create("ms.log","MEMORY_STICK",1,LOG_LEVEL_INFO);
+    logger = log_create("ms.log","MEMORY_STICK",1,LOG_LEVEL_INFO);
     log_info(logger, "Iniciando modulo Memory Stick");
 
     // ------------------------------ CONEXIONES ------------------------------ //
 
-    int fd_memoria = crear_conexion(ip_mem,puerto_mem);
+    int fd_memoria = crear_conexion(ms_config.ip_memoria, ms_config.puerto_memoria);
     
     if(fd_memoria != -1) {
-
-        enviar_mensaje(mi_id, MENSAJE, fd_memoria);
-        log_info(logger,"Memory Stick conectado a Kernel Memory");
+        enviar_mensaje(ms_config.id_modulo, MENSAJE, fd_memoria);
+        log_info(logger, "Memory Stick conectado a Kernel Memory");
         log_info(logger, "Esperando saludo de la CPU a traves de la Memoria...");
         
         // Se espera la llegada de algún mensaje del socket de Kernel Memory
@@ -53,16 +52,15 @@ int main(int argc, char* argv[]) {
     else {
         
         log_error(logger, "No se pudo conectar con la Memoria.");
-        config_destroy(config);
+        destruir_configuracion_ms();
         log_destroy(logger);
-        
         return EXIT_FAILURE;
     }
 
     // ------------------------------ LIMPIEZA DE LA MEMORIA ------------------------------ //
 
     close(fd_memoria);
-    config_destroy(config);
+    destruir_configuracion_ms();
     log_destroy(logger);
 
     return 0;
