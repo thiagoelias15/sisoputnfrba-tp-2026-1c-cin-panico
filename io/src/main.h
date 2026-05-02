@@ -4,6 +4,8 @@
 #include <utils/utils.h>
 #include "config/config.h"
 #include <commons/log.h>
+
 extern t_log* logger;
+extern int io_corriendo;
 
 #endif

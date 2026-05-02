@@ -1,3 +1,4 @@
+#include "main.h"
 #include <utils/utils.h>
 
 int main (int argc, char*argv[]) {
@@ -5,18 +6,17 @@ int main (int argc, char*argv[]) {
     t_log* logger = log_create("memoria.log","MEMORIA",1,LOG_LEVEL_INFO);
 
     if(argc < 2) {
-
         printf("[ERROR] Mal ejecutado");
         return EXIT_FAILURE;
     }
- 
+    
     // Se carga el config para extraer la información necesaria
-    t_config* config = iniciar_config(argv[1]);
+    cargar_configuracion_memoria(argv[1]);
+    logger = log_create("memoria.log", "MEMORIA", 1, LOG_LEVEL_INFO);
 
     char* puerto = config_get_string_value(config, "PUERTO_ESCUCHA");
 
     if(puerto == NULL) {
-
         log_error(logger,"No se encontro el PUERTO_ESCUCHA en el config");
         return EXIT_FAILURE;
     }
@@ -126,9 +126,8 @@ int main (int argc, char*argv[]) {
     close(fd_scheduler);
     close(fd_swap);
     close(fd_escucha);
-    config_destroy(config);
+    destruir_configuracion_memoria();
     log_destroy(logger);
-    
     return 0;
 }
 

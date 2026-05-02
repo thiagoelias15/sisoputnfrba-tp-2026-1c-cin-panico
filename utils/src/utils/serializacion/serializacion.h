@@ -25,6 +25,7 @@ typedef enum {
     SOLICITUD_INSTRUCCION,
     CONTEXTO_PCB,
     INTERRUPCION,
+
     //Syscalls(peticiones de CPU a scheduler)
     SYSCALL_SLEEP,
     SYSCALL_STDIN,
@@ -32,13 +33,19 @@ typedef enum {
     SYSCALL_MUTEX_CREATE,
     SYSCALL_MUTEX_LOCK,
     SYSCALL_MUTEX_UNLOCK,
-    SYSCALL_EXIT
+    SYSCALL_EXIT,
+
+    //Syscalls(cpu)
+    FETCH_INSTRUCCION,
+    SYSCALL_MEM_ALLOC,
+    SYSCALL_MEM_FREE,
+    SYSCALL_INIT_PROC
 } op_code;
 
 // Funciones para enviar y recibir mensajes y PCBs
-
 void enviar_mensaje(char* mensaje, op_code codigo_operacion, int socket_cliente);
 char* recibir_mensaje(int socket_cliente);
+
 //funciones para el intercambio de contextos
 void enviar_pcb(t_pcb* pcb, int socket, op_code cod_op);
 t_pcb* recibir_pcb(int socket);

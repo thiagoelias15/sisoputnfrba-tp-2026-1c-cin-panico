@@ -7,8 +7,10 @@
 - Conexiones Memory
 - Conexiones del Memory Stick
 - Checkpoint 2 utils
+- Checkpoint 2 todos los modulos menos memory
+- Modularizacion general del tp
 
 ## INCOMPLETO
 
-- checkpoint 2 todos los modulos xd
+- checkpoint 2 Memory 
 
