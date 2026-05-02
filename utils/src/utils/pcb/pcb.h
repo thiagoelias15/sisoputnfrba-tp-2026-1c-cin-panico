@@ -10,6 +10,7 @@ typedef enum {
     BLOCK,
     EXIT
 } t_estado;
+
 // estructura del PCB(process control block)
 typedef struct {
     uint32_t pid;      

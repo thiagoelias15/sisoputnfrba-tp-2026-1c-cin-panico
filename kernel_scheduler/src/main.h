@@ -35,6 +35,7 @@ extern int fd_memoria;
 extern char* algoritmo_planificacion;
 extern int quantum_rr;
 extern t_log* logger;
+extern int scheduler_corriendo;
 
 // Firmas de funciones
 void* planificador_corto_plazo(void* arg);
