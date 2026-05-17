@@ -39,7 +39,11 @@ typedef enum {
     FETCH_INSTRUCCION,
     SYSCALL_MEM_ALLOC,
     SYSCALL_MEM_FREE,
-    SYSCALL_INIT_PROC
+    SYSCALL_INIT_PROC,
+    //Memoria
+    CONSULTAR_ESPACIO,
+    LEER_MEMORIA,
+    ESCRIBIR_MEMORIA
 } op_code;
 
 // Funciones para enviar y recibir mensajes y PCBs

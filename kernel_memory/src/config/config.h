@@ -8,6 +8,11 @@ typedef struct{
     char* id_recibida;
     char* puerto;
     int memoria_operando;
+    int segment_max_size;
+    char* allocation_strategy;
+    int instruction_delay;
+    int compaction_delay;
+    char* scripts_basepath;
     t_config* config_base;
 } t_memoria_config;
 
