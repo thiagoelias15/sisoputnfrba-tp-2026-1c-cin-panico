@@ -1,5 +1,5 @@
-#ifndef MAIN_H_
-#define MAIN_H_
+#ifndef SCHEDULER_MAIN_H_
+#define SCHEDULER_MAIN_H_
 
 #include <commons/collections/list.h>
 #include <commons/collections/dictionary.h>
@@ -32,15 +32,11 @@ extern t_dictionary* dic_interfaces;
 extern int fd_cpu;
 extern int fd_memoria;
 
-extern char* algoritmo_planificacion;
-extern int quantum_rr;
+// Asumo que en el config tenés estas variables
+// extern char* algoritmo_planificacion;
+// extern int quantum_rr;
+
 extern t_log* logger;
 extern int scheduler_corriendo;
-
-// Firmas de funciones
-void* planificador_corto_plazo(void* arg);
-void* temporizador_quantum(void* arg);
-void* atender_cliente(void* arg);
-void mover_a_ready(int pid_buscado);
 
 #endif
