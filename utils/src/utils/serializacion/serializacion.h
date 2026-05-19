@@ -54,6 +54,8 @@ char* recibir_mensaje(int socket_cliente);
 void enviar_pcb(t_pcb* pcb, int socket, op_code cod_op);
 t_pcb* recibir_pcb(int socket);
 
+void enviar_operacion(op_code operacion, int socket_cliente);
+
 int recibir_operacion(int socket_cliente);
 
 #endif 

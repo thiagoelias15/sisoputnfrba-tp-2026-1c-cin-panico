@@ -35,6 +35,11 @@ void enviar_pcb(t_pcb* pcb, int socket, op_code cod_op) {
     free(buffer);
 }
 
+void enviar_operacion(op_code operacion, int socket_cliente) {
+
+    send(socket_cliente, &operacion, sizeof(op_code),0);
+}
+
 int recibir_operacion(int socket_cliente) {
     int cod_op;
     if (recv(socket_cliente, &cod_op, sizeof(int), MSG_WAITALL) > 0) {

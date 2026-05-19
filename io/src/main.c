@@ -47,7 +47,8 @@ int main(int argc, char* argv[]) {
             // segun el codigo de operacion que nos mando el scheduler la IO decide que tiene que hacer
             switch(cod_op) {
 
-                case SYSCALL_STDOUT:
+                case SYSCALL_STDOUT: {
+
                     // el scheduler manda un texto diciendo STDOUT con la funcion enviar_mensaje y la IO lo recibe
                     // una vez que recibio y sabe lo que tiene que hacer lo borramos para dejarlo preparado para recibir otro mensaje
 
@@ -72,8 +73,9 @@ int main(int argc, char* argv[]) {
                     send(fd_scheduler, &pid, sizeof(int),0);
                     log_info(logger,"## (%d) Finalizo STDOUT.",pid);
                     break;
+                }
 
-                case SYSCALL_STDIN:
+                case SYSCALL_STDIN: {
             
                     // Misma lógica de limpieza que en STDOUT.
                     char* msg_aviso = recibir_mensaje(fd_scheduler);
@@ -100,8 +102,9 @@ int main(int argc, char* argv[]) {
 
                     log_info(logger, "## (%d) Finalizó STDIN.", pid);
                     break;
+                }
 
-                case SYSCALL_SLEEP:
+                case SYSCALL_SLEEP: {
                 
                     char* msg_aviso = recibir_mensaje(fd_scheduler);
                     free(msg_aviso);// Limpiamos el texto de aviso.
@@ -126,7 +129,8 @@ int main(int argc, char* argv[]) {
 
                     log_info(logger, "## (%d) Finalizó SLEEP, aviso enviado al Scheduler.", pid);
                     break;
-
+                }
+                
                 default:
                 
                     // Si llega basura por el socket o una operación que no existe, caemos acá en vez de romper el programa.

@@ -1,6 +1,6 @@
 #include "main.h"
-#include "instrucciones.h"
-#include "ciclo_instrucciones.h"
+#include "instrucciones/instrucciones.h"
+#include "Ciclo_Instrucciones/ciclo_instrucciones.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -93,7 +93,7 @@ int main(int argc, char* argv[]) {
                 int modifico_pc = 0; // flag para saber si la instruccion altero el pc(ej un salto JNZ)
 
                 //--------- ETAPA 3° EXECUTE(la funcion esta en la carpeta instrucciones) ---------------------------
-                ejecutar_instruccion(tokens, pcb_actual, &desalojar, &motivo_desalojo, &modifico_pc, logger);
+                ejecutar_instrucciones(tokens, pcb_actual, &desalojar, &motivo_desalojo, &modifico_pc, logger);
                 
                 // si la instruccion no fue un JNZ, incrementamos el pc para la proxima instruccion
                 if(!modifico_pc) {

@@ -2,7 +2,7 @@
 #define CICLO_INSTRUCCION_H_
 
 #include "main.h"
-#include "instrucciones.h"
+#include "../instrucciones/instrucciones.h"
 #include <utils/utils.h>
 
 // Pide la instrucción a Memoria enviando PID y PC

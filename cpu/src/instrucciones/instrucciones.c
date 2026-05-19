@@ -1,9 +1,5 @@
 #include "instrucciones.h"
 
-
-
-#include "instrucciones.h"
-
 /* En C, el texto "AX" (char*) y la variable física 'pcb->ax' no tienen relación.
 
 C no sabe abrir una variable a partir de un texto de forma automática.

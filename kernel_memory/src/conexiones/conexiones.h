@@ -5,6 +5,7 @@
 #include <commons/log.h>
 #include <pthread.h>
 #include "../core/memoria_core.h"
+#include "../../../utils/src/utils/serializacion/serializacion.h"
 
 extern t_log* logger;
 

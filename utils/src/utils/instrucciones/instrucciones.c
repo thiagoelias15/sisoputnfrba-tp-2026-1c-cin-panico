@@ -63,27 +63,27 @@ void ejecutar_instruccion(char** tokens, t_pcb* pcb, int* desalojar, op_code* mo
         *motivo = SYSCALL_SLEEP;
     } 
     else if (strcmp(comando, "STDOUT")== 0) {
-        desalojar = 1;
-        motivo_desalojo = SYSCALL_STDOUT;
+        *desalojar = 1;
+        *motivo = SYSCALL_STDOUT;
     }
     else if (strcmp(comando, "STDIN")== 0) {
-        desalojar = 1;
-        motivo_desalojo = SYSCALL_STDIN;
+        *desalojar = 1;
+        *motivo = SYSCALL_STDIN;
     }
     else if(strcmp(comando, "MUTEX_CREATE")== 0) {
-        desalojar = 1;
-        motivo_desalojo = SYSCALL_MUTEX_CREATE;
-                    } 
+        *desalojar = 1;
+        *motivo = SYSCALL_MUTEX_CREATE;
+    } 
     else if(strcmp(comando, "MUTEX_LOCK") == 0) {
-        desalojar = 1;
-        motivo_desalojo = SYSCALL_MUTEX_LOCK;
-                    } 
+        *desalojar = 1;
+        *motivo = SYSCALL_MUTEX_LOCK;
+    } 
     else if(strcmp(comando, "MUTEX_UNLOCK") == 0) {
-        desalojar = 1;
-        motivo_desalojo = SYSCALL_MUTEX_UNLOCK;
-                    }
+        *desalojar = 1;
+        *motivo = SYSCALL_MUTEX_UNLOCK;
+    }
     else if(strcmp(comando, "EXIT") == 0) {
-        desalojar = 1;
-        motivo_desalojo = SYSCALL_EXIT;
+        *desalojar = 1;
+        *motivo = SYSCALL_EXIT;
     }
 }
