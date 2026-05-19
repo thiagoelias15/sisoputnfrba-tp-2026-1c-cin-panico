@@ -1,12 +1,14 @@
 #include "conexiones.h"
 
 void* atender_cliente(void* arg) {
+
     int fd_cliente = *(int*)arg;
     free(arg); // Liberamos el puntero que usamos para pasar el FD
 
     // Recibir Handshake inicial
     int cod_op = recibir_operacion(fd_cliente);
-    if (cod_op == MENSAJE) { 
+    if (cod_op == MENSAJE) {
+
         char* id_modulo = recibir_mensaje(fd_cliente);
         log_info(logger, "Se conecto el modulo: %s", id_modulo);
         free(id_modulo);
@@ -14,10 +16,13 @@ void* atender_cliente(void* arg) {
 
     //Bucle infinito para escuchar a cliente
     int conectado = 1;
+
     while(conectado) {
+
         int operacion = recibir_operacion(fd_cliente);
         
         switch(operacion) {
+            
             case FETCH_INSTRUCCION:
                 atender_fetch_cpu(fd_cliente);
                 break;

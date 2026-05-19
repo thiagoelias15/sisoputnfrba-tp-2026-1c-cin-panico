@@ -19,7 +19,7 @@ void setear_valor_registro(t_pcb* pcb, char* reg, uint32_t valor) {
     else if(strcmp(reg, "DX") == 0) pcb->dx = (uint8_t)valor;
     else if(strcmp(reg, "EAX") == 0) pcb->eax = valor;
     else if(strcmp(reg, "EBX") == 0) pcb->ebx = valor;
-    else if(strcmp(reg, "ECX") == 0) pcb->ecx = valor
+    else if(strcmp(reg, "ECX") == 0) pcb->ecx = valor;
     else if(strcmp(reg, "EDX") == 0) pcb->edx = valor;
     else if(strcmp(reg, "SI") == 0) pcb->si = valor;
     else if(strcmp(reg, "DI") == 0) pcb->di = valor;
