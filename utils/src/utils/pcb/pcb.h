@@ -2,7 +2,9 @@
 #define PCB_H_
 
 #include <stdint.h>
+
 //creamos el diccionario de estados posibles
+
 typedef enum { 
     NEW,
     READY,
@@ -25,6 +27,9 @@ typedef struct {
 
     // Registros de dirección lógica (4 bytes)
     uint32_t si, di;
+
+    int prioridad;  // la prioridad actual con la que compite en READY
+    int prioridad_original; //  la prioridad base para restaurarlo despues de soltar el Mutex
 } t_pcb;
 
 #endif 

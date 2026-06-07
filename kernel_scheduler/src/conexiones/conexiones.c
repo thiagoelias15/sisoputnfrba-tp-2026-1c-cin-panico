@@ -1,5 +1,14 @@
 #include "conexiones.h"
 
+bool comparar_prioridades(void* pcb1, void* pcb2){
+    t_pcb* p1 = (t_pcb*)pcb1;
+    t_pcb* p2 = (t_pcb*)pcb2;
+
+    //numero menor = mayor prioridad
+    //retorna True si p1 debe ir antes que p2 en la cola ready
+    return p1 -> prioridad < p2 -> prioridad;
+}
+
 void* atender_cliente(void* arg) {
     
     int socket_cliente = *(int*)arg; // arg es un puntero que apunta a la direccion de memoria donde el main guardo el numero de socket y (int*)*arg le dice al compilador que trate a ese puntero como un entero
@@ -55,11 +64,16 @@ void* atender_cliente(void* arg) {
                     break;
                 }
 
-                case SYSCALL_MUTEX_CREATE: { //mutex create crea una cola con un nombre determinado y guarda en dictionary todas esas colas que va creando para no repetir
+                case SYSCALL_MUTEX_CREATE: { // mutex create crea una cola con un nombre determinado y guarda en dictionary todas esas colas que va creando para no repetir
                 
-                    char* m_name = recibir_mensaje(fd_cpu); //recibe el nombre que mande la cpu
-                    if(!dictionary_has_key(dic_mutex, m_name)) { //se fija si ya existe ese nombre
-                        dictionary_put(dic_mutex, m_name, queue_create()); //si es nuevo lo guarda y crea una cola de espera vacia
+                    char* m_name = recibir_mensaje(fd_cpu); // recibe el nombre que mande la cpu
+                    if(!dictionary_has_key(dic_mutex, m_name)) { // se fija si ya existe ese nombre
+                       // Creamos la nueva estructura del pcb del main.h
+                       t_mutex* nuevo_mutex = malloc (sizeof(t_mutex));
+                       nuevo_mutex -> owner = NULL; // nadie lo tiene todavia
+                       nuevo_mutex -> bloqueados = queue_create(); 
+
+                       dictionary_put(dic_mutex, m_name, nuevo_mutex);
                     }
                     enviar_pcb(pcb_upd, fd_cpu, CONTEXTO_PCB); 
                     free(m_name);
@@ -69,23 +83,36 @@ void* atender_cliente(void* arg) {
                 case SYSCALL_MUTEX_LOCK: { 
 
                     char* m_name = recibir_mensaje(fd_cpu);
-                    t_queue* q = dictionary_get(dic_mutex, m_name);
+                    t_mutex* mutex_actual = dictionary_get(dic_mutex, m_name);
                 
-                    if(queue_is_empty(q)) { //si la cola esta vacia el proceso se mete primero y se lo devuelve a la cpu para que siga corriendo, sino esta vacio el prcoceso pierde su turno actual de cpu
+                    if(mutex_actual -> owner == NULL) { // si la cola esta vacia el proceso se mete primero y se lo devuelve a la cpu para que siga corriendo, sino esta vacio el prcoceso pierde su turno actual de cpu
                     
-                        log_info(logger, "## (%d) Toma el mutex %s",pcb_upd->pid, m_name);
-                        queue_push(q, pcb_upd);
+                        log_info(logger, "## (%d) Toma el mutex %s", pcb_upd->pid, m_name);
+                        mutex_actual -> owner = pcb_upd; // se anota como dueño del mutex
                         enviar_pcb(pcb_upd, fd_cpu, CONTEXTO_PCB); 
                     } else {
-                    
+                    // Mutex bloqueado: bloquea proceso
                         log_info(logger, "## (%d) Pasa del estado de EXEC al estado BLOCK", pcb_upd->pid);
+                        // se mueve a cola bloqueados
                         pthread_mutex_lock(&m_block);
-                        list_add(cola_block,pcb_upd); //movemos el proceso a la cola block porque tiene que esperar
+                        list_add(cola_block,pcb_upd); // movemos el proceso a la cola block porque tiene que esperar
                         pthread_mutex_unlock(&m_block);
-                        queue_push(q, pcb_upd); //pone el proceso en el final de la cola del mutex 
-                        sem_post(&sem_procesos_ready); //como la CPU ahora esta libre le avisa al scheduler que mande otro proceso a ejecutar
-                    }
+                        queue_push(mutex_actual-> bloqueados, pcb_upd); // pone el proceso en el final de la cola del mutex 
+                        
+                        // Herencia de prioridades
+                        // si la prioridad es Más Alta (número menor) que el owner actual
+                        if(pcb_upd -> prioridad < mutex_actual -> owner -> prioridad) {
+                            log_info(logger, "## (%d) hereda prioridad %d a (%d)", pcb_upd -> pid, pcb_upd -> prioridad, mutex_actual -> owner -> pid);
 
+                            // le cambia la prioridad entre el que llego y el dueño
+                            mutex_actual -> owner -> prioridad = pcb_upd -> prioridad;
+                           
+                            pthread_mutex_lock(&m_ready);
+                            list_sort(cola_ready, comparar_prioridades);
+                            pthread_mutex_unlock(&m_ready);
+                        }
+                    sem_post(&sem_procesos_ready); //libero CPU
+                    }
                     free(m_name);
                     break;
                 }
@@ -94,16 +121,20 @@ void* atender_cliente(void* arg) {
                     
                     char* m_name = recibir_mensaje(fd_cpu);
                     log_info(logger,"## (%d) Libera el mutex %s",pcb_upd->pid,m_name);
-                    t_queue* q= dictionary_get(dic_mutex,m_name);
-                    queue_pop(q); // Saca al proceso actual de la cabeza de la cola del mutex
-
-                    if(!queue_is_empty(q)) { //se fija si hay otros procesos detras, si hay mira quien esta con queue_peek
-                        
-                        t_pcb* proximo = queue_peek(q); // busca o se fija el  proceso siguiente en la fila 
-                        mover_a_ready(proximo->pid); //busca ese siguiente proceso en la colaa de BLOCK y lo pasa a READY
-                    }
+                    t_mutex* mutex_actual = dictionary_get(dic_mutex,m_name);
+                    // restauro la prioridad original por si se la habian cambiado
+                    pcb_upd -> prioridad = pcb_upd -> prioridad_original;
                     
-                    enviar_pcb(pcb_upd,fd_cpu, CONTEXTO_PCB); //el proceso que solto el mutex vuelve a CPU para ejectuar la instruccion que sigue
+                    // le paso al mutex al siguiente de la fila(si hay alguno)
+                    if(!queue_is_empty(mutex_actual-> bloqueados)) { 
+                        
+                        t_pcb* proximo = queue_pop(mutex_actual -> bloqueados); // queue_pop saca al primero elemento de bloqueados y lo devuelve para que se pueda usar y el segundo pasa a la primera posicion
+                        mutex_actual -> owner = proximo; // el nuevo owner es el que estaba esperando
+                        mover_a_ready(proximo->pid); // busca ese siguiente proceso en la colaa de BLOCK y lo pasa a READY
+                    }else{
+                        mutex_actual -> owner = NULL; // Nadie lo estaba esperando, queda libre
+                    }
+                    enviar_pcb(pcb_upd,fd_cpu, CONTEXTO_PCB); // el proceso que solto el mutex vuelve a CPU para ejectuar la instruccion que sigue
                     free(m_name);
                     break;
                 }
@@ -144,7 +175,7 @@ void* atender_cliente(void* arg) {
                     recv(fd_cpu, &tam, sizeof(int), MSG_WAITALL); // Recibe tamaño a mostrar desde CPU
                     recv(fd_cpu, &dir, sizeof(int), MSG_WAITALL); //Recibe dirección física de orígen
                     log_info(logger, "##(%d) Solicitó syscall: STDOUT", pcb_upd->pid);
-                    log_info (logger,"##(%d) Pasa del estado EXEC al estado BLOCK", pcb_upd->pid); //Como toda operación de I/O es lenta, el proceso no puede seguir en la CPU. Se lo mueve de EXEC a BLOCK.
+                    log_info (logger,"##(%d) Pasa del estado EXEC al estado BLOCK", pcb_upd->pid); // Como toda operación de I/O es lenta, el proceso no puede seguir en la CPU. Se lo mueve de EXEC a BLOCK.
                     pthread_mutex_lock(&m_block); // Protege la cola de bloqueados
                     list_add(cola_block, pcb_upd); // Mueve el PCB a estado bloqueado
                     pthread_mutex_unlock(&m_block); // Libera la protección de la cola
@@ -174,15 +205,15 @@ void* atender_cliente(void* arg) {
 
     } else {
 
-        //si no es la CPU es una de las IOs
+        // si no es la CPU es una de las IOs
         log_info(logger,"## Interfaz de IO %s conectada", id_recibida); 
         
-        //la anotamos en el diccionario usando su nombre como Clave y su socket como valor
+        // la anotamos en el diccionario usando su nombre como Clave y su socket como valor
         dictionary_put(dic_interfaces, id_recibida, (void*)(intptr_t)socket_cliente); 
 
         while(scheduler_corriendo) {
 
-            //Usamos socket_cliente y no fd_io como antes 
+            // Usamos socket_cliente y no fd_io como antes 
             op_code cod_op = recibir_operacion(socket_cliente);
             
             if(cod_op == -1) {
