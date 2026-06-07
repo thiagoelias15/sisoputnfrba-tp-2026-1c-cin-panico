@@ -39,4 +39,11 @@ extern int fd_memoria;
 extern t_log* logger;
 extern int scheduler_corriendo;
 
+typedef struct {
+    t_pcb* owner; // el proceso que hizo el lock y tiene el recurso
+    t_queue* bloqueados; // la cola de los que estan esperando
+} t_mutex;
+void inicializar_estructuras(void);
+void crear_proceso_inicial(void);
+
 #endif
