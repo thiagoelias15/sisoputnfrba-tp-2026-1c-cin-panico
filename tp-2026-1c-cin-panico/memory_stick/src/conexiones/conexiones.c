@@ -5,14 +5,14 @@ void* atender_cpu(void* arg){
     free(arg);
     log_info(logger, "## CPU conectado");
     while(ms_corriendo) {
-        op_code cod_op = recibir_operacion(socket_cpu);
+        op_code cop_op = recibir_operacion(socket_cpu);
         if(cod_op == -1) {
             log_warning(logger, "Se desconecto la CPU");
             break;
         }
         switch(cod_op) {
             
-            case ESCRIBIR_MEMORIA: {
+            case ESCRITURA_MEMORIA: {
                 int dir_fisica, tamanio;
                 //recibimos la direccion fisica y el tamaño
                 recv(socket_cpu, &dir_fisica, sizeof(int), MSG_WAITALL);
@@ -31,7 +31,7 @@ void* atender_cpu(void* arg){
                 break;
             }
             
-            case LEER_MEMORIA: {
+            case LECTURA_MEMORIA: {
                 int dir_fisica, tamanio;
 
                 //recibimos la direccion y el tamaño a leer

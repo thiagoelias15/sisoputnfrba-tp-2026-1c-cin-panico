@@ -9,8 +9,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <pthread.h>
-#include "conexiones/conexiones.h"
-#include "operaciones/operaciones.h"
+#include "conexiones.h"
+#include "operaciones.h"
 
 // El puntero que va a representar nuestra memoria de hardware real
 extern void* espacio_memoria; 

@@ -43,9 +43,7 @@ typedef enum {
     //Memoria
     CONSULTAR_ESPACIO,
     LEER_MEMORIA,
-    ESCRIBIR_MEMORIA,
-    LEER_SWAP,
-    ESCRIBIR_SWAP
+    ESCRIBIR_MEMORIA
 } op_code;
 
 // Funciones para enviar y recibir mensajes y PCBs
