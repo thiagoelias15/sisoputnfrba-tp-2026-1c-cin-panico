@@ -2,6 +2,7 @@
 #define PCB_H_
 
 #include <stdint.h>
+#include <commons/collections/list.h> 
 
 //creamos el diccionario de estados posibles
 
@@ -12,6 +13,11 @@ typedef enum {
     BLOCK,
     EXIT
 } t_estado;
+typedef struct {
+    int id;
+    uint32_t direccion_base;
+    uint32_t tamanio;
+} t_segmento;
 
 // estructura del PCB(process control block)
 typedef struct {
@@ -30,6 +36,7 @@ typedef struct {
 
     int prioridad;  // la prioridad actual con la que compite en READY
     int prioridad_original; //  la prioridad base para restaurarlo despues de soltar el Mutex
+    t_list* tabla_segmentos;
 } t_pcb;
 
 #endif 

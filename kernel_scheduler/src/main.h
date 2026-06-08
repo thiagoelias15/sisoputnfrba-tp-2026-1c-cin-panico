@@ -19,7 +19,8 @@
 
 // Variables globales(extern le dice al compilador que en algun lado del codigo van a estar definidas y que no les reserve ahora espacion en memoria)
 extern t_list* cola_new;
-extern t_list* cola_ready;
+extern t_list** colas_ready;
+extern int cantidad_colas;
 extern t_list* cola_exec;
 extern t_list* cola_block;
 extern t_list* cola_exit;

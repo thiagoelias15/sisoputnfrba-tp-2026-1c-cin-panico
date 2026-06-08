@@ -27,6 +27,7 @@ void* atender_cliente(void* arg) {
             op_code cod_op = recibir_operacion(socket_cliente);
             if(cod_op == -1)break;
             t_pcb* pcb_upd = recibir_pcb(fd_cpu);
+            pcb_en_ejecucion = NULL;
 
             switch (cod_op) {
 

@@ -16,4 +16,3 @@ void* leer_de_memoria(int dir_fisica, int tamanio){
     log_info(logger, "## Lectura de %d bytes", tamanio);
     return buffer_lectura; //Devolvemos los bytes leidos
 }
-

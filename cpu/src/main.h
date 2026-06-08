@@ -9,6 +9,7 @@
 
 extern t_log* logger;
 extern int cpu_corriendo;
+extern int tam_max_segmento; // esto es para la MMU(cuando cpu lee stdin y stdout recibe direccion logica y se debe hacer una cuenta matematica para mandarsela al scheduler)
 
 
 #endif

@@ -34,6 +34,7 @@ typedef enum {
     SYSCALL_MUTEX_LOCK,
     SYSCALL_MUTEX_UNLOCK,
     SYSCALL_EXIT,
+    SEG_FAULT,
 
     //Syscalls(cpu)
     FETCH_INSTRUCCION,
@@ -44,8 +45,8 @@ typedef enum {
     CONSULTAR_ESPACIO,
     LEER_MEMORIA,
     ESCRIBIR_MEMORIA,
-    LEER_SWAP,
-    ESCRIBIR_SWAP
+    SWAP_LECTURA,
+    SWAP_ESCRITURA
 } op_code;
 
 // Funciones para enviar y recibir mensajes y PCBs

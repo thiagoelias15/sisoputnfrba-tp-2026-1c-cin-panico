@@ -2,7 +2,24 @@
 
 void inicializar_estructuras(void) {
     cola_new = list_create();
-    cola_ready = list_create();
+    
+    // Si es Colas Multinivel, contamos cuántas pide el array
+    if(strcmp(kernel_config.algoritmo_planificacion, "CMN") == 0) {
+        cantidad_colas = 0;
+        // Agregamos chequeo de NULL por si el array no vino en el config
+        while(kernel_config.algoritmos_colas != NULL && kernel_config.algoritmos_colas[cantidad_colas] != NULL) {
+            cantidad_colas++;
+        }
+    } else {
+        // Si es FIFO o RR, solo necesitamos 1 cola global
+        cantidad_colas = 1; 
+    }
+
+    colas_ready = malloc(sizeof(t_list*) * cantidad_colas);
+    for(int i = 0; i < cantidad_colas; i++) {
+        colas_ready[i] = list_create();
+    }
+
     cola_exec = list_create();
     cola_block = list_create();
     cola_exit = list_create();
@@ -15,7 +32,6 @@ void inicializar_estructuras(void) {
     pthread_mutex_init(&m_exit, NULL);
     sem_init(&sem_procesos_ready, 0, 0);
 }
-
 void crear_proceso_inicial(void) {
     t_pcb* pcb_inicial = malloc(sizeof(t_pcb));
     pcb_inicial->pid = 0;
@@ -41,7 +57,7 @@ void crear_proceso_inicial(void) {
     log_info(logger, "## (%d) Pasa del estado NEW a READY", pcb_a_ready->pid); 
 
     pthread_mutex_lock(&m_ready);
-    list_add(cola_ready, pcb_a_ready);
+    list_add(colas_ready[0], pcb_a_ready);
     pthread_mutex_unlock(&m_ready);
     
     sem_post(&sem_procesos_ready);
