@@ -6,18 +6,21 @@ int io_corriendo = 1;
 
 int main(int argc, char* argv[]) {
 
-    if(argc<2) {
+    if(argc<3) {
 
-        printf("[ERROR] Mal ejecutado");
+      printf("[ERROR] Mal ejecutado. Uso correcto: ./bin/io [Archivo Config] [Tipo]\n");
         return EXIT_FAILURE;
     }
+    
+    char* path_config = argv[1];
+    char* tipo_interfaz = argv[2];
 
     // Se inicializan las herramientas de las commons y se extraen los parámetros correspondientes al config
-    cargar_configuracion_io(argv[1]);
+    cargar_configuracion_io(path_config);
 
     // Se inicia el Logger
     logger = log_create("io.log", io_config.id_modulo, 1, LOG_LEVEL_INFO);
-    log_info(logger, "Iniciando modulo de I/O ");
+ log_info(logger, "Iniciando modulo de I/O. Interfaz: %s, Tipo: %s", io_config.id_modulo, tipo_interfaz);
 
     // ------------------------------ CONEXIONES ------------------------------ //
 
@@ -66,7 +69,7 @@ int main(int argc, char* argv[]) {
                     log_info(logger, "## (%d) Peticion STDOUT recibida. Tamaño a leer: %d, Direccion: %d", pid,tam,dir);
                     // como imprimir por pantalla o buscar en un disco duro, las acciones que hace la IO, son muy lentas tenemos que frenar al hilo por un tiempo para darle tiempo a que haga lo que se le pidio
             
-                    usleep(1000 * 1000); // esto seria un millon de microsegundos = 1 segundo si vemos que dsp falla se puede poner mas alizó STDOUT, aviso enviado al Scheduler.", pid);
+                    usleep(1000 * 1000); 
                 
                     //ahora vendria la devolucion, primero hay que avisarle al scheduler que termino con la etiqueta FIN_IO y luego le mandamos la informacion,PID del proceso que scheduler debe sacar de BLOCK y mover a READY
                     enviar_mensaje("FIN_IO", MENSAJE, fd_scheduler);
