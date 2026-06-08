@@ -12,6 +12,6 @@ void ejecutar_instrucciones(char** tokens, t_pcb* pcb, int* desalojar, op_code* 
 
 void setear_valor_registro(t_pcb* pcb, char* reg, uint32_t valor);
 uint32_t obtener_valor_registro(t_pcb* pcb, char* reg);
-int traducir_direccion_mmu(uint32_t dir_logica, uint32_t tam_a_leer_escribir, t_pcb* pcb)
+int traducir_direccion_mmu(uint32_t dir_logica, uint32_t tam_a_leer_escribir, t_pcb* pcb);
 
 #endif

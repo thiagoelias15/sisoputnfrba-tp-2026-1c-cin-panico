@@ -52,7 +52,7 @@ int traducir_direccion_mmu(uint32_t dir_logica, uint32_t tam_a_leer_escribir, t_
 
     //buscamos el segmento en la tabla de procesos
     t_segmento* segmento_encontrado = NULL;
-    for(int i=0; i < list_get(pcb -> tabla_segmentos); i++){
+    for(int i = 0; i < list_size(pcb->tabla_segmentos); i++){
         t_segmento* seg = list_get(pcb-> tabla_segmentos, i);
         if(seg-> id == num_segmento){
             segmento_encontrado = seg;
