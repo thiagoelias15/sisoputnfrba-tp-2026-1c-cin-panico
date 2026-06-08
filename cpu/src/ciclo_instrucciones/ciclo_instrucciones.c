@@ -1,18 +1,17 @@
 #include "ciclo_instrucciones.h"
 
 char* realizar_fetch(t_pcb* pcb, int fd_memoria, t_log* logger) {
-    // Le mandamos a Memoria el codigo de operacion, el PID y el PC actual
     op_code op_fetch = FETCH_INSTRUCCION;
+    log_info(logger, "DEBUG: Usando fd_memoria = %d para el FETCH", fd_memoria);
     send(fd_memoria, &op_fetch, sizeof(op_code), 0);
     send(fd_memoria, &(pcb->pid), sizeof(int), 0);
     send(fd_memoria, &(pcb->pc), sizeof(uint32_t), 0);
 
-    // Esperamos la respuesta (el texto de la instruccion)
-    char* instruccion = recibir_mensaje(fd_memoria);
-    log_info(logger, "## PID: %d - FETCH - Program Counter: %d", pcb->pid, pcb->pc);
-    return instruccion;
+    // Al usar recibir_mensaje, esta función espera recibir primero el tamaño 
+    // y luego el buffer de datos, que es exactamente lo que tu nueva 
+    // atender_fetch_cpu está enviando.
+    return recibir_mensaje(fd_memoria);
 }
-
 int hay_interrupcion(int fd_scheduler, t_log* logger) {
     int interrupcion = 0;
     // MSG_DONTWAIT permite ver el socket sin quedarse bloqueado esperando. 

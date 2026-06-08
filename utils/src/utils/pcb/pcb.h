@@ -1,5 +1,5 @@
-#ifndef PCB_H_
-#define PCB_H_
+#ifndef PCB_H
+#define PCB_H
 
 #include <stdint.h>
 #include <commons/collections/list.h> 
@@ -20,6 +20,7 @@ typedef struct {
 } t_segmento;
 
 // estructura del PCB(process control block)
+#pragma pack (push,1)
 typedef struct {
     uint32_t pid;      
     uint32_t pc;       
@@ -38,5 +39,7 @@ typedef struct {
     int prioridad_original; //  la prioridad base para restaurarlo despues de soltar el Mutex
     t_list* tabla_segmentos;
 } t_pcb;
+#pragma pack (pop)
 
+t_pcb* pcb_create();
 #endif 

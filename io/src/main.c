@@ -1,5 +1,5 @@
 #include "main.h"
-#include "core/io_core.h" 
+#include "io_core/io_core.h" 
 
 // Declaración real del logger global que pusimos en main.h
 t_log* logger;

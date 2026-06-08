@@ -1,4 +1,5 @@
 #include "main.h"
+#include <utils/pcb/pcb.h>
 
 void inicializar_estructuras(void) {
     cola_new = list_create();
@@ -49,7 +50,7 @@ void crear_proceso_inicial(char* nombre_archivo) {
     int respuesta_memoria;
     recv(fd_memoria, &respuesta_memoria, sizeof(int), MSG_WAITALL);
     // ------------------------------------------------------------------------------- //
-    t_pcb* pcb_inicial = malloc(sizeof(t_pcb));
+    t_pcb* pcb_inicial = pcb_create();
     pcb_inicial->pid = 0;
     pcb_inicial->pc = 0;
     pcb_inicial->prioridad = 0; // Prioridad máxima por enunciado

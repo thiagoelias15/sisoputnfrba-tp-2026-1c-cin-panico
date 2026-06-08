@@ -5,6 +5,7 @@
 #include "config/config.h"
 #include <commons/log.h>
 #include <commons/string.h>
+#include "ciclo_instrucciones/ciclo_instrucciones.h"
 
 
 extern t_log* logger;

@@ -11,16 +11,20 @@ void* atender_cliente(void* arg) {
 
         char* id_modulo = recibir_mensaje(fd_cliente);
         log_info(logger, "Se conecto el modulo: %s", id_modulo);
+        if (strcmp(id_modulo, "MEMORY_STICK") == 0) { // O como sea que se llame tu ID
+        int tamaño_ms;
+        recv(fd_cliente, &tamaño_ms, sizeof(int), MSG_WAITALL);
+        log_info(logger, "Recibí tamaño de MS: %d", tamaño_ms);
+        }
         free(id_modulo);
     }
-
     //Bucle infinito para escuchar a cliente
     int conectado = 1;
 
     while(conectado) {
 
         int operacion = recibir_operacion(fd_cliente);
-        
+       log_warning(logger, "DEBUG: Recibí op_code: %d", operacion);
         switch(operacion) {
             
             //Atiende cuando el Kernel solicita inicializar un proceso y registrar su archivo .prc de forma dinámica

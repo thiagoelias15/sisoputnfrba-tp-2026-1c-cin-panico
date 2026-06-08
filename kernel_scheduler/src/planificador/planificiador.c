@@ -6,8 +6,13 @@ t_pcb* pcb_en_ejecucion = NULL;
 void* planificador_corto_plazo(void* arg) {
 
     while(scheduler_corriendo) {
-
         sem_wait(&sem_procesos_ready);
+        if (fd_cpu == -1) {
+            log_warning(logger, "Esperando conexión de CPU...");
+            sem_post(&sem_procesos_ready); // Volvemos a poner el semáforo para no trabarnos
+            usleep(500000); // Esperamos medio segundo
+            continue;
+        }
         t_pcb* pcb_a_ejecutar = NULL;
 
         //buscamos el proceso mas prioritario disponible

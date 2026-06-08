@@ -2,8 +2,8 @@
 #define IO_CORE_H
 
 #include <commons/log.h>
-#include "../utils/utils.h" 
-#include "../utils/serializacion/serializacion.h"
+#include "utils/utils.h" 
+#include "utils/serializacion/serializacion.h"
 
 // Hacemos el puente con el logger que vive en main.c
 extern t_log* logger;

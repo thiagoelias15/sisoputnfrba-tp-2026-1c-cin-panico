@@ -7,10 +7,10 @@
 
 typedef struct {
     char* ip_memoria;
-    char* puerto_memoria;
+    char* puerto_escucha;
     char* id_modulo;
     char* swap_file_path;
-    char* swap_file_size;
+    int swap_file_size;
     int   block_size;
     t_config* config_base;
 } t_swap_config;

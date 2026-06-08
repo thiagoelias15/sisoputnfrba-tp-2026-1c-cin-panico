@@ -15,7 +15,7 @@ void cargar_configuracion_kernel(char* path) {
     kernel_config.algoritmo_planificacion = config_get_string_value(kernel_config.config_base, "PLANIFICATION_ALGORITHM");
     kernel_config.quantum_rr = config_get_int_value(kernel_config.config_base, "RR_QUANTUM");
     kernel_config.algoritmos_colas = config_get_array_value(kernel_config.config_base, "QUEUES_ALGORITHMS");
-    char* preempt = config_get_string_value(kernel_config.config_base, "    QUEUE_PREEMPTION");
+    char* preempt = config_get_string_value(kernel_config.config_base, "QUEUE_PREEMPTION");
     kernel_config.queue_preemption = (strcmp(preempt, "TRUE")== 0) ? 1 : 0;  
 }
 
