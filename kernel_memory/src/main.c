@@ -1,5 +1,5 @@
 #include "main.h"
-#include "memoria_administrador.h"
+#include "memoria_administrador/memoria_administrador.h"
 #include "conexiones/conexiones.h" 
 
 t_log* logger;

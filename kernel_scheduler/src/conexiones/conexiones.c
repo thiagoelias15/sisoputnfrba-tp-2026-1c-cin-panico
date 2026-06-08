@@ -1,4 +1,6 @@
 #include "conexiones.h"
+#include <stdbool.h>
+extern t_pcb* pcb_en_ejecucion;
 
 bool comparar_prioridades(void* pcb1, void* pcb2){
     t_pcb* p1 = (t_pcb*)pcb1;
@@ -81,42 +83,49 @@ void* atender_cliente(void* arg) {
                     break;
                 }
 
-                case SYSCALL_MUTEX_LOCK: { 
+           case SYSCALL_MUTEX_LOCK: { 
 
-                    char* m_name = recibir_mensaje(fd_cpu);
-                    t_mutex* mutex_actual = dictionary_get(dic_mutex, m_name);
-                
-                    if(mutex_actual -> owner == NULL) { // si la cola esta vacia el proceso se mete primero y se lo devuelve a la cpu para que siga corriendo, sino esta vacio el prcoceso pierde su turno actual de cpu
-                    
-                        log_info(logger, "## (%d) Toma el mutex %s", pcb_upd->pid, m_name);
-                        mutex_actual -> owner = pcb_upd; // se anota como dueño del mutex
-                        enviar_pcb(pcb_upd, fd_cpu, CONTEXTO_PCB); 
-                    } else {
-                    // Mutex bloqueado: bloquea proceso
-                        log_info(logger, "## (%d) Pasa del estado de EXEC al estado BLOCK", pcb_upd->pid);
-                        // se mueve a cola bloqueados
-                        pthread_mutex_lock(&m_block);
-                        list_add(cola_block,pcb_upd); // movemos el proceso a la cola block porque tiene que esperar
-                        pthread_mutex_unlock(&m_block);
-                        queue_push(mutex_actual-> bloqueados, pcb_upd); // pone el proceso en el final de la cola del mutex 
-                        
-                        // Herencia de prioridades
-                        // si la prioridad es Más Alta (número menor) que el owner actual
-                        if(pcb_upd -> prioridad < mutex_actual -> owner -> prioridad) {
-                            log_info(logger, "## (%d) hereda prioridad %d a (%d)", pcb_upd -> pid, pcb_upd -> prioridad, mutex_actual -> owner -> pid);
+    char* m_name = recibir_mensaje(fd_cpu);
+    t_mutex* mutex_actual = dictionary_get(dic_mutex, m_name);
 
-                            // le cambia la prioridad entre el que llego y el dueño
-                            mutex_actual -> owner -> prioridad = pcb_upd -> prioridad;
-                           
-                            pthread_mutex_lock(&m_ready);
-                            list_sort(cola_ready, comparar_prioridades);
-                            pthread_mutex_unlock(&m_ready);
-                        }
-                    sem_post(&sem_procesos_ready); //libero CPU
-                    }
-                    free(m_name);
-                    break;
+    if(mutex_actual->owner == NULL) { 
+        // Si el mutex está libre
+        log_info(logger, "## (%d) Toma el mutex %s", pcb_upd->pid, m_name);
+        mutex_actual->owner = pcb_upd; 
+        enviar_pcb(pcb_upd, fd_cpu, CONTEXTO_PCB); 
+        
+    } else {
+        // Mutex bloqueado: bloquea proceso
+        log_info(logger, "## (%d) Pasa del estado de EXEC al estado BLOCK", pcb_upd->pid);
+        
+        // Se mueve a cola bloqueados
+        pthread_mutex_lock(&m_block);
+        list_add(cola_block, pcb_upd); 
+        pthread_mutex_unlock(&m_block);
+        
+        queue_push(mutex_actual->bloqueados, pcb_upd); 
+        
+        // Herencia de prioridades
+        if(pcb_upd->prioridad < mutex_actual->owner->prioridad) {
+            log_info(logger, "## (%d) hereda prioridad %d a (%d)", pcb_upd->pid, pcb_upd->prioridad, mutex_actual->owner->pid);
+
+            // Cambiamos la prioridad del dueño
+            mutex_actual->owner->prioridad = pcb_upd->prioridad;
+           
+            pthread_mutex_lock(&m_ready);
+            for(int i = 0; i < cantidad_colas; i++) {
+                if(colas_ready[i] != NULL && !list_is_empty(colas_ready[i])) {
+                    list_sort(colas_ready[i], comparar_prioridades);
                 }
+            }
+            pthread_mutex_unlock(&m_ready);
+        }
+     
+    }
+    
+    free(m_name);
+    break;
+}
 
                 case SYSCALL_MUTEX_UNLOCK: {
                     

@@ -52,6 +52,7 @@ void* planificador_corto_plazo(void* arg) {
         }
     }
     return NULL;
+}
 
 void* temporizador_quantum(void* arg) {
     
@@ -94,7 +95,7 @@ void mover_a_ready(int pid_buscado) { //La función entra a la "sala de espera" 
             prio = 0; // Para FIFO y RR ignoramos la prioridad, todos van a la cola 0
         }
         pthread_mutex_lock(&m_ready);
-        list_add(cola_ready[prio], pcb_a_mover);
+        list_add(colas_ready[prio], pcb_a_mover);
         pthread_mutex_unlock(&m_ready);
         //desalojo o preemption
         if(kernel_config.queue_preemption == 1 && pcb_en_ejecucion != NULL){

@@ -1,4 +1,6 @@
 #include "serializacion.h"
+#include <stdlib.h>
+#include <string.h>
 
 void enviar_mensaje(char* mensaje, op_code codigo_operacion, int socket_cliente) {
     int tamaño_mensaje = strlen(mensaje) + 1;

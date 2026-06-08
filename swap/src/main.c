@@ -1,6 +1,5 @@
 #include "main.h"
-#include "instrucciones/instrucciones.h"
-#include "ciclo_instrucciones/ciclo_instrucciones.h"
+#include "utils/instrucciones/instrucciones.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -8,7 +7,7 @@
 
 t_log* logger;
 FILE* archivo_swap; // puntero al archivo fisico en el disco
-swap_corriendo = 1;
+int swap_corriendo = 1;
 
 
 int main(int argc, char* argv[]) {
@@ -26,14 +25,14 @@ int main(int argc, char* argv[]) {
    
     // abrimos el archivo en modo rb+ (lectura/escritura)
     // rb+ nos permite modificar bloques sin borrar el resto del archivo
-    archivo_swap = fopen(swap_config,swap_file_path, "rb+");
+    archivo_swap = fopen(swap_config.swap_file_path, "rb+");
     
     if(archivo_swap == NULL){
         log_error(logger, "Error al abrir el archivo de Swap en: %s", swap_config.swap_file_path);
         return EXIT_FAILURE;
     }
     // servidor: Swap espera conexiones de Kernel Memory
-    int fd_escucha = inicar_servidor(swap_config.puerto_memoria);
+    int fd_escucha = iniciar_servidor(swap_config.puerto_memoria);
     int socket_memoria = esperar_cliente(fd_escucha);
 
     send(socket_memoria, &swap_config.block_size, sizeof(int), 0);
@@ -70,7 +69,7 @@ int main(int argc, char* argv[]) {
         } else if(op == SWAP_ESCRITURA) {
             
             //recibimos los datos que el kernel memory quiere guardar
-            void* buffer = recibir_ mensaje(socket_memoria);
+            void* buffer = recibir_mensaje(socket_memoria);
             //fseek: ubicamos el cursor, fwrite guarda los bytes en el archivo
             fseek(archivo_swap, num_bloque * swap_config.block_size, SEEK_SET);
             fwrite(buffer, swap_config.block_size, 1, archivo_swap); 

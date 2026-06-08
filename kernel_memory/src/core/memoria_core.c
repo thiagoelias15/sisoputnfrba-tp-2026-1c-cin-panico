@@ -1,7 +1,9 @@
 #include "memoria_core.h"
-#include "memoria_administrador.h"
+#include "memoria_administrador/memoria_administrador.h"
 #include <stdio.h>
 #include <commons/collections/dictionary.h>
+#include "../main.h"
+
 
 // El Kernel avisa que se crea un proceso y nos pasa su archivo real
 void atender_creacion_proceso(int fd_kernel) {
