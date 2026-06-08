@@ -4,7 +4,7 @@
 t_list* tabla_segmentos_global;
 pthread_mutex_t m_memoria;
 void* espacio_memoria_real;
-
+t_dictionary* mapeo_archivos_procesos;
 void inicializar_memoria() {
     tabla_segmentos_global = list_create();
     pthread_mutex_init(&m_memoria, NULL);
@@ -22,6 +22,7 @@ void inicializar_memoria() {
     list_add(tabla_segmentos_global, segmento_inicial);
     log_info(logger, "## Memoria inicializada. Segmento inicial creado (Base: 0, Tamaño: %d)", 
              memoria_config.memoria_operando);
+             mapeo_archivos_procesos = dictionary_create();
 }
 // funcion best fit: recorre la tabla global y elige el segmento libre mas pequeño que entra el nuevo proceso
 

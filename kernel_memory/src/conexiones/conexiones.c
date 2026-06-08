@@ -1,5 +1,5 @@
 #include "conexiones.h"
-
+#include "../core/memoria_core.h"
 void* atender_cliente(void* arg) {
 
     int fd_cliente = *(int*)arg;
@@ -23,6 +23,11 @@ void* atender_cliente(void* arg) {
         
         switch(operacion) {
             
+            //Atiende cuando el Kernel solicita inicializar un proceso y registrar su archivo .prc de forma dinámica
+            case SYSCALL_INIT_PROC:
+                atender_creacion_proceso(fd_cliente);
+                break;
+
             case FETCH_INSTRUCCION:
                 atender_fetch_cpu(fd_cliente);
                 break;

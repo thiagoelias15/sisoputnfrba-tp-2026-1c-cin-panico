@@ -1,34 +1,71 @@
 #include "memoria_core.h"
-#include "../memoria_administrador/memoria_administrador.h"
+#include "memoria_administrador.h"
 #include <stdio.h>
+#include <commons/collections/dictionary.h>
 
-//funcion que lee una linea especifica de un archivo
+// El Kernel avisa que se crea un proceso y nos pasa su archivo real
+void atender_creacion_proceso(int fd_kernel) {
+    int pid;
+    uint32_t tam_nombre;
+    
+    recv(fd_kernel, &pid, sizeof(int), MSG_WAITALL);
+    recv(fd_kernel, &tam_nombre, sizeof(uint32_t), MSG_WAITALL);
+    
+    char* nombre_archivo = malloc(tam_nombre);
+    recv(fd_kernel, nombre_archivo, tam_nombre, MSG_WAITALL);
+
+    // Convertimos el PID a string para usarlo como clave en el diccionario de las commons
+    char clave_pid[10];
+    sprintf(clave_pid, "%d", pid);
+    
+    // Guardamos el nombre real del archivo asociado a este PID
+    dictionary_put(mapeo_archivos_procesos, clave_pid, nombre_archivo);
+    
+    log_info(logger, "## PID: %d - Registrado con archivo: %s", pid, nombre_archivo);
+    
+    int ok = 1;
+    send(fd_kernel, &ok, sizeof(int), 0);
+}
+
+// Función interna: lee una línea específica usando el nombre dinámico guardado
 char* leer_instruccion_de_archivo(int pid, uint32_t pc) {
-    char path_completo[256];
-    sprintf(path_completo, "%s/MEMORIA_PRE_%d.prc", memoria_config.scripts_basepath, pid);
-
-    FILE* archivo = fopen(path_completo, "r");
-    if(archivo == NULL) {
-        return "EXIT"; // si no existe el script cortamos todo
+    char clave_pid[10];
+    sprintf(clave_pid, "%d", pid);
+    
+    // Buscamos el nombre real del archivo que nos mandó el Kernel para este PID
+    char* nombre_archivo = dictionary_get(mapeo_archivos_procesos, clave_pid);
+    if (nombre_archivo == NULL) {
+        log_error(logger, "No se encontró un archivo registrado para el PID: %d", pid);
+        return "EXIT";
     }
+
+    char path_completo[256];
+    sprintf(path_completo, "%s/%s", memoria_config.scripts_basepath, nombre_archivo);
+    
+    FILE* archivo = fopen(path_completo, "r");
+    if (archivo == NULL) {
+        log_error(logger, "Error al abrir el archivo en la ruta: %s", path_completo);
+        return "EXIT";
+    }
+
     char* linea = malloc(128);
     int linea_actual = 0;
 
-    //buscamos la linea correspondiente al PC
-    while(fgets(linea, 128, archivo) != NULL){
-        if(linea_actual == pc){
-            //quitamos el salto de linea al final por las dudas
-            linea[strcspn(linea, "\n")] = 0;
+    while (fgets(linea, 128, archivo) != NULL) {
+        if (linea_actual == pc) {
+            linea[strcspn(linea, "\n")] = 0; // Quitamos el salto de línea
             fclose(archivo);
             return linea;
         }
-        loena_actual++;
+        linea_actual++;
     }
+
     fclose(archivo);
     free(linea);
-    return "EXIT" // si el pc es mayor a la cantidad de lineas, salimos
+    return "EXIT"; 
 }
-// Devolver lista de instrucciones
+
+// Devolver lista de instrucciones (FETCH)
 void atender_fetch_cpu(int fd_cpu) {
     int pid;
     uint32_t pc;
@@ -36,19 +73,22 @@ void atender_fetch_cpu(int fd_cpu) {
     recv(fd_cpu, &pid, sizeof(int), MSG_WAITALL);
     recv(fd_cpu, &pc, sizeof(uint32_t), MSG_WAITALL);
 
-    log_info(logger, "Pedido de FETCH - PID: %d - PC: %d", pid, pc);
-    usleep(memoria_config.instruction_delay * 1000); // Retardo 
+    log_info(logger, "## PID: %d - Obtener instrucción: %d", pid, pc);
+    usleep(memoria_config.instruction_delay * 1000); 
 
+    // Ahora lee de forma completamente dinámica
     char* instruccion = leer_instruccion_de_archivo(pid, pc);
+    
     enviar_mensaje(instruccion, FETCH_INSTRUCCION, fd_cpu);
-    // si no fue el valor por defecto "EXIT", liberamos memoria de la linea leida
-    if(strcmp(instruccion, "EXIT") != 0) free(instruccion);
+    
+    if (strcmp(instruccion, "EXIT") != 0) free(instruccion);
 }
 
-// consulta el espacio real gestionado por memoria.administrador
-void atender_consulta_espacio (int fd_kernel) {
+// Consulta el espacio real gestionado por memoria_administrador
+void atender_consulta_espacio(int fd_kernel) {
     log_info(logger, "El Kernel consulto el espacio libre.");
     int espacio_libre_total = 0;
+    
     pthread_mutex_lock(&m_memoria);
     for (int i = 0; i < list_size(tabla_segmentos_global); i++) {
         t_segmento_memoria* seg = list_get(tabla_segmentos_global, i);
@@ -61,24 +101,28 @@ void atender_consulta_espacio (int fd_kernel) {
     send(fd_kernel, &espacio_libre_total, sizeof(int), 0);
 }
 
-// lectura de memoria
+// Lectura de memoria REAL
 void atender_lectura_memoria(int fd_modulo) {
     uint32_t dir_fisica;
     uint32_t tamanio;
- 
+    
     recv(fd_modulo, &dir_fisica, sizeof(uint32_t), MSG_WAITALL);
-    recv(fd_modulo, &tamanio, sizeof(uint32_t), MSG_WAITALLA);
-    usleep(memoria_config.instruction_delay *  1000);
+    recv(fd_modulo, &tamanio, sizeof(uint32_t), MSG_WAITALL);
+    
+    usleep(memoria_config.instruction_delay * 1000);
+    
     void* buffer = malloc(tamanio);
     pthread_mutex_lock(&m_memoria);
     memcpy(buffer, espacio_memoria_real + dir_fisica, tamanio);
     pthread_mutex_unlock(&m_memoria);
-    send(fd_modulo, buffer, tamanio, 0 );
-    log_info(logger,"## Lectura - Dir. Fisica: %d - Tamaño: %d", dir_fisica, tamanio);
-}
     
-    // Escritura de memoria REAL
-    void atender_escritura_memoria(int fd_modulo) {
+    send(fd_modulo, buffer, tamanio, 0);
+    log_info(logger, "## Lectura - Dir. Física: %d - Tamaño: %d", dir_fisica, tamanio);
+    free(buffer);
+}
+
+// Escritura de memoria REAL
+void atender_escritura_memoria(int fd_modulo) {
     uint32_t dir_fisica;
     uint32_t tamanio;
     
