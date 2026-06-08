@@ -21,12 +21,11 @@ int scheduler_corriendo = 1;
 
 int main(int argc,char* argv[]) {
     // Se verifica la información en el config
-    if(argc<2) {  
+    if(argc<3) {  
 
-        printf("[ERROR] Mal ejecutado\n");
+     printf("[ERROR] Uso correcto: ./bin/kernel_scheduler [config_path] [script_name.prc]\n");
         return EXIT_FAILURE; 
     }
-
     // Se carga el config, extrayendo la información necesaria para la conexión de módulos.
 
     cargar_configuracion_kernel(argv[1]);
@@ -53,7 +52,7 @@ int main(int argc,char* argv[]) {
     //------------------------ Planificacion a largo plazo(proceso 0 o inical) ---------------------------------------
 
     //el proceso 0 o inicial seria PID 0
-crear_proceso_inicial();
+crear_proceso_inicial(argv[2]);
 
     // --------------------------Planificador a corto plazo-------------------------------------//
 

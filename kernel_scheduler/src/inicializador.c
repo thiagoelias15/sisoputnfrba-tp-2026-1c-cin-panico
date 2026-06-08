@@ -32,7 +32,23 @@ void inicializar_estructuras(void) {
     pthread_mutex_init(&m_exit, NULL);
     sem_init(&sem_procesos_ready, 0, 0);
 }
-void crear_proceso_inicial(void) {
+void crear_proceso_inicial(char* nombre_archivo) {
+    int pid_inicial = 0;
+
+    // ------------------- ENVIAR MENSAJE DE CREACIÓN A LA MEMORIA ------------------- //
+    op_code cop = SYSCALL_INIT_PROC;
+    uint32_t tam_nombre = strlen(nombre_archivo) + 1;
+
+    // Enviamos: Código de operación, el PID y el tamaño del string seguido del string del archivo
+    send(fd_memoria, &cop, sizeof(op_code), 0);
+    send(fd_memoria, &pid_inicial, sizeof(int), 0);
+    send(fd_memoria, &tam_nombre, sizeof(uint32_t), 0);
+    send(fd_memoria, nombre_archivo, tam_nombre, 0);
+
+    // Esperamos la confirmación (OK) de la Memoria para avanzar seguros
+    int respuesta_memoria;
+    recv(fd_memoria, &respuesta_memoria, sizeof(int), MSG_WAITALL);
+    // ------------------------------------------------------------------------------- //
     t_pcb* pcb_inicial = malloc(sizeof(t_pcb));
     pcb_inicial->pid = 0;
     pcb_inicial->pc = 0;
