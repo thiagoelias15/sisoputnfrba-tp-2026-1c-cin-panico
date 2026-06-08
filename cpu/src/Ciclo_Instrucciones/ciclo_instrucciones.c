@@ -30,16 +30,22 @@ void gestionar_desalojo(t_pcb* pcb, op_code motivo, char** tokens, int fd_schedu
     // Si se rompio el ciclo se le devuelve todo al scheduler
     enviar_operacion(motivo, fd_scheduler);
 
+    // le devolvemos el PCB actualizado (el "contexto")
+    enviar_pcb(pcb, fd_scheduler, motivo);
+    
     // Mandamos los datos extra dependiendo de que Syscall provoco el desalojo
     if (motivo == SYSCALL_SLEEP) {
         int tiempo = atoi(tokens[1]);
         send(fd_scheduler, &tiempo, sizeof(int), 0);
     } 
     else if (motivo == SYSCALL_STDOUT || motivo == SYSCALL_STDIN) {
-        int tam = obtener_valor_registro(pcb, tokens[2]);
-        int dir = obtener_valor_registro(pcb, tokens[1]);
+        int dir = obtener_valor_registro(pcb, tokens[1]); 
+        int tam = obtener_valor_registro(pcb, tokens[2]); 
+        //aca ya sabemos que el proceso para la barrera de la MMU
+        //volvemos a traducir de forma segura para darsela al scheduler
+        int dir_fisica = traducir_direccion_mmu(dir_logica, tam, pcb)
         send(fd_scheduler, &tam, sizeof(int), 0);
-        send(fd_scheduler, &dir, sizeof(int), 0);
+        send(fd_scheduler, &dir_fisica, sizeof(int), 0);
         send(fd_scheduler, &(pcb->pid), sizeof(int), 0);
     }
     else if (motivo == SYSCALL_MUTEX_CREATE || motivo == SYSCALL_MUTEX_LOCK || motivo == SYSCALL_MUTEX_UNLOCK) {
@@ -49,6 +55,5 @@ void gestionar_desalojo(t_pcb* pcb, op_code motivo, char** tokens, int fd_schedu
         send(fd_scheduler, tokens[1], len_string, 0);
     }
 
-    // Finalmente, le devolvemos el PCB actualizado (el "contexto")
-    enviar_pcb(pcb, fd_scheduler, motivo);
+    
 }

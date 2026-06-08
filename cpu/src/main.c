@@ -1,6 +1,6 @@
 #include "main.h"
 #include "instrucciones/instrucciones.h"
-#include "Ciclo_Instrucciones/ciclo_instrucciones.h"
+#include "ciclo_instrucciones/ciclo_instrucciones.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -8,18 +8,19 @@
 
 t_log* logger;
 int cpu_corriendo = 1;
+int tam_max_segmento= 64; // la memoria nos va a ir actualizando este numero despues
 
 int main(int argc, char* argv[]) { 
     // La variable "argc" almacena la cantidad de palabras en la terminal, mientras que "argv[numero]" almacena la palabra en dicha posición.
     
     // Retorna ERROR si la cantidad de palabras en la terminal es menor a dos
-    if(argc < 2) {
-        printf("[ERROR] Debe utilizar el siguiente formato: ./bin/cpu ./config\n");
+    if(argc < 3) {
+        printf("[ERROR] Debe utilizar el siguiente formato: ./bin/cpu ./config\n [identificado(numero)]" );
         return EXIT_FAILURE;
     }
     
     cargar_configuracion_cpu(argv[1]);
-    logger = log_create("cpu.log", "CPU", 1, LOG_LEVEL_INFO);
+    logger = log_create("cpu.log", argv[2], 1, LOG_LEVEL_INFO);
 
     // ------------------------------ CONEXIONES ------------------------------ //
     

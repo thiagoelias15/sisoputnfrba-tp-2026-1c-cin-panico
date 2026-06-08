@@ -4,7 +4,8 @@
 
 // Definición de variables globales(en el main.h con extern solo le avisabamos al compiladro que existian pero no estaban definidas)
 t_list* cola_new;
-t_list* cola_ready;
+t_list** colas_ready;
+int cantidad_colas = 0;
 t_list* cola_exec;
 t_list* cola_block;
 t_list* cola_exit;
