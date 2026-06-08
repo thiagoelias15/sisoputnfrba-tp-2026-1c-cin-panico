@@ -4,6 +4,9 @@
 
 #include <stdint.h>
 #include <commons/collections/list.h>
+#include <commons/collections/dictionary.h>
+
+extern t_dictionary* mapeo_archivos_procesos; // Guarda la relación PID -> Nombre del archivo .prc
 
 typedef struct {
     int id;
