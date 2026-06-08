@@ -35,7 +35,7 @@ int main(int argc,char* argv[]) {
 
     // 2. INICIALIZAMOS ESTRUCTURAS
 
- inicializar_estructuras();
+    inicializar_estructuras();
 
     // ------------------------------ SCHEDULER COMO CLIENTE ------------------------------ //
 
@@ -53,7 +53,7 @@ int main(int argc,char* argv[]) {
     //------------------------ Planificacion a largo plazo(proceso 0 o inical) ---------------------------------------
 
     //el proceso 0 o inicial seria PID 0
-crear_proceso_inicial();
+    void crear_proceso_inicial(char* nombre_archivo);
 
     // --------------------------Planificador a corto plazo-------------------------------------//
 
