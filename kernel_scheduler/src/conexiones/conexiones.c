@@ -27,7 +27,7 @@ void* atender_cliente(void* arg) {
             op_code cod_op = recibir_operacion(socket_cliente);
             if(cod_op == -1)break;
             t_pcb* pcb_upd = recibir_pcb(fd_cpu);
-            pcb_en_ejecucion = NULL;
+            // t_pcb* pcb_en_ejecucion = NULL; Dejo comentado porque creo que no es necesario en esta función
 
             switch (cod_op) {
 
@@ -109,7 +109,12 @@ void* atender_cliente(void* arg) {
                             mutex_actual -> owner -> prioridad = pcb_upd -> prioridad;
                            
                             pthread_mutex_lock(&m_ready);
-                            list_sort(cola_ready, comparar_prioridades);
+                            for(int i = 0; i < cantidad_colas; i++) {
+                                // Verificamos que la cola exista y tenga elementos antes de ordenar
+                                if(colas_ready[i] != NULL && !list_is_empty(colas_ready[i])) {
+                                    list_sort(colas_ready[i], comparar_prioridades);
+                                }
+                            }
                             pthread_mutex_unlock(&m_ready);
                         }
                     sem_post(&sem_procesos_ready); //libero CPU

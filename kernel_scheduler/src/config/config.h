@@ -12,7 +12,7 @@ typedef struct {
     char* id_modulo;
     char* algoritmo_planificacion;
     int quantum_rr;
-    char** algortimos_colas;
+    char** algoritmos_colas;
     int queue_preemption;
     t_config* config_base; 
 } t_kernel_config;

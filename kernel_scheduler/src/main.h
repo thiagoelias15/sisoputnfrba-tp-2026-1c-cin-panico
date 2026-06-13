@@ -45,6 +45,5 @@ typedef struct {
     t_queue* bloqueados; // la cola de los que estan esperando
 } t_mutex;
 void inicializar_estructuras(void);
-void crear_proceso_inicial(void);
 
 #endif

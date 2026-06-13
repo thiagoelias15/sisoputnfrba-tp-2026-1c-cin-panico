@@ -1,10 +1,9 @@
 #include "memoria_administrador.h"
+#include "../core/memoria_core.h"
 #include "../main.h"
 
-t_list* tabla_segmentos_global;
-pthread_mutex_t m_memoria;
-void* espacio_memoria_real;
 t_dictionary* mapeo_archivos_procesos;
+
 void inicializar_memoria() {
     tabla_segmentos_global = list_create();
     pthread_mutex_init(&m_memoria, NULL);
@@ -20,9 +19,8 @@ void inicializar_memoria() {
     segmento_inicial -> ocupado = 0;
 
     list_add(tabla_segmentos_global, segmento_inicial);
-    log_info(logger, "## Memoria inicializada. Segmento inicial creado (Base: 0, Tamaño: %d)", 
-             memoria_config.memoria_operando);
-             mapeo_archivos_procesos = dictionary_create();
+    log_info(logger, "## Memoria inicializada. Segmento inicial creado (Base: 0, Tamaño: %d)", memoria_config.memoria_operando);
+    mapeo_archivos_procesos = dictionary_create();
 }
 // funcion best fit: recorre la tabla global y elige el segmento libre mas pequeño que entra el nuevo proceso
 
@@ -58,14 +56,14 @@ int asignar_memoria(int pid, uint32_t tamanio) {
         resto -> id = list_size(tabla_segmentos_global); // ID nuevo
         resto -> pid = -1;
         resto -> base = hueco -> base + tamanio;
-        resto-> tamanio = hueco-> tamanio - tamnio;
+        resto-> tamanio = hueco-> tamanio - tamanio;
         resto-> ocupado = 0; // Libre
 
         list_add(tabla_segmentos_global, resto);
     }
     // actualizamos el hueco original para que sea el segmento del proceso
     hueco-> ocupado = 1;
-    hueco_pid = pid;
+    hueco -> pid = pid;
     hueco-> tamanio = tamanio;
 
     pthread_mutex_unlock(&m_memoria);
@@ -115,9 +113,9 @@ void compactar_memoria() {
 // limpiamos la tabla: eliminamos todos los huecos libres y creamos uno solo gigante al final
 // primero, eliminamos los segmentos libres actuales de la lista
     for(int i = list_size(tabla_segmentos_global)-1; i>=0; i--){
-        t_segmento_memori* seg = list_get(tabla_segmentos_global,i);
-        if(seg-> ocupado == 0){
-        list_remove_and_destroy_element(tabla_segmentos_global, i, free);
+        t_segmento_memoria* seg = list_get(tabla_segmentos_global,i);
+        if(seg -> ocupado == 0){
+            list_remove_and_destroy_element(tabla_segmentos_global, i, free);
         }
     }
 
@@ -139,7 +137,7 @@ void liberar_todos_segmentos_pid(int pid){
     pthread_mutex_lock(&m_memoria);
 
 
-    for(int i = 0; i < list_size(tabla_segmentos_global), i++){
+    for(int i = 0; i < list_size(tabla_segmentos_global); i++){
        t_segmento_memoria* seg = list_get(tabla_segmentos_global, i);
         if (seg -> pid == pid) {
             seg -> ocupado = 0;
