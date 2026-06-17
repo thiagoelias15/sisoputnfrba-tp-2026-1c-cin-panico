@@ -102,9 +102,8 @@ char* recibir_mensaje(int socket_cliente) {
 }
 /*Deserializacion de PCB, reconstruye un PCB a partir de una secuencia de bytes recibida.
   1. Recibe la parte estatica, 2. crea una nueva lista vacia,3. usa el tamaño recibido para iterar y recrear cada objeto segmento*/
-    t_pcb* recibir_pcb(int socket) {
-    op_code cod_op_recibido;
-    recv(socket, &cod_op_recibido, sizeof(op_code), MSG_WAITALL);
+
+t_pcb* recibir_pcb(int socket) {
 
     t_pcb* pcb = malloc(sizeof(t_pcb));
 
