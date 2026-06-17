@@ -6,8 +6,15 @@ t_pcb* pcb_en_ejecucion = NULL;
 void* planificador_corto_plazo(void* arg) {
 
     while(scheduler_corriendo) {
-
         sem_wait(&sem_procesos_ready);
+        sem_wait(&sem_cpu_libre);
+        if (fd_cpu == -1) {
+            log_warning(logger, "Esperando conexión de CPU...");
+            sem_post(&sem_cpu_libre);
+            sem_post(&sem_procesos_ready); // Volvemos a poner el semáforo para no trabarnos
+            usleep(500000); // Esperamos medio segundo
+            continue;
+        }
         t_pcb* pcb_a_ejecutar = NULL;
 
         //buscamos el proceso mas prioritario disponible
@@ -32,7 +39,7 @@ void* planificador_corto_plazo(void* arg) {
            // Evaluamos si corresponde lanzar el temporizador de Round Robin
             int usa_rr = 0; // Por defecto es 0 (Falso)
             
-            if(strcmp(kernel_config.algoritmo_planificacion, "CMN") == 0) {
+                if(strcmp(kernel_config.algoritmo_planificacion, "CMN") == 0) {
                 // En CMN, nos fijamos qué dice el array para la cola de este proceso
                 if(kernel_config.algoritmos_colas != NULL && 
                    strcmp(kernel_config.algoritmos_colas[pcb_a_ejecutar->prioridad], "RR") == 0) {
@@ -49,6 +56,8 @@ void* planificador_corto_plazo(void* arg) {
                 pthread_create(&hilo_quantum, NULL, temporizador_quantum, pcb_a_ejecutar);
                 pthread_detach(hilo_quantum);
             }
+        }else {
+            sem_post(&sem_cpu_libre);
         }
     }
     return NULL;
@@ -59,7 +68,8 @@ void* temporizador_quantum(void* arg) {
     t_pcb* pcb = (t_pcb*)arg; //aca le decimos al compilador que trate a ese arg como un puntero a un pcb para leer el PID
     usleep(kernel_config.quantum_rr * 1000); //la funcion usleep espera una x cantidad de microsegundos y por mil para pasar esos microsegundos a milisegundos
     log_info(logger,"## (%d) Desalojo de quantum",pcb->pid);
-    enviar_mensaje("INTERRUPCION_RR",INTERRUPCION,fd_cpu); //aca el scheduler le pide a la cpu que frene la ejecucion del procesos y se lo devuelva
+    op_code interrupcion = INTERRUPCION;
+    send(fd_cpu, &interrupcion, sizeof(op_code), 0);
     return NULL;
 }
 
@@ -104,7 +114,8 @@ void mover_a_ready(int pid_buscado) { //La función entra a la "sala de espera" 
             log_info(logger, "## (%d) Prioridad: %d Desalojado por cola mas prioritaria por el proceso %d con prioridad %d",
             pcb_en_ejecucion -> pid, pcb_en_ejecucion -> prioridad, pcb_a_mover -> pid, pcb_a_mover -> prioridad);
         //le avisamos a la CPU que frene lo que esta haciendo
-        enviar_mensaje("DESALOJO", INTERRUPCION, fd_cpu); 
+        op_code interrupcion = INTERRUPCION;
+        send(fd_cpu, &interrupcion, sizeof(op_code), 0);
         }   
         }
     sem_post(&sem_procesos_ready); //avisamos que hay un proceso nuevo para mandar al cpu

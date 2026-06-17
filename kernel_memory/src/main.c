@@ -1,10 +1,7 @@
 #include "main.h"
 #include "memoria_administrador/memoria_administrador.h"
-#include "conexiones/conexiones.h"
+#include "conexiones/conexiones.h" 
 
-t_list* tabla_segmentos_global;
-pthread_mutex_t m_memoria;
-void* espacio_memoria_real;
 t_log* logger;
 
 int main(int argc, char* argv[]) { 

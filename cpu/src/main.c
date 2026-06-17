@@ -1,11 +1,9 @@
 #include "main.h"
 #include "instrucciones/instrucciones.h"
-#include "ciclo_instrucciones/ciclo_instrucciones.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <sys/socket.h>
-
 t_log* logger;
 int cpu_corriendo = 1;
 int tam_max_segmento= 64; // la memoria nos va a ir actualizando este numero despues
@@ -39,6 +37,7 @@ int main(int argc, char* argv[]) {
     // si las conexiones a Memoria y Scheduler fueron exitosas, inicia a andar el CPU
     if(fd_memoria != -1 && fd_scheduler != -1) {
         log_info(logger, "CPU conectada a todos los modulos correctamente");
+        /*
         log_info(logger, "Enviando saludo a la Memory Stick a traves de la Memoria...");
         enviar_mensaje("¡Hola Stick! Soy la CPU mandando un saludo.", HANDSHAKE_CPU_A_MS, fd_memoria);
 
@@ -52,6 +51,7 @@ int main(int argc, char* argv[]) {
         } else {
             log_error(logger, "Fallo el handshake con la Stick. Codigo recibido: %d", cod_op);
         }
+    */
     }
 
     // bucle principal( escucha al scheduler)
@@ -64,18 +64,32 @@ int main(int argc, char* argv[]) {
             break;
         }
 
-        if(cod_op_sched == CONTEXTO_PCB) { // si la orden es ejecutar un proceso, recibimos su "contexto(pcb)"
-            
+    if(cod_op_sched == CONTEXTO_PCB) {
+            log_info(logger, "¡Recibí CONTEXTO_PCB del Scheduler!");
             t_pcb* pcb_actual = recibir_pcb(fd_scheduler);
-            int desalojar = 0; // flag para saber cuando devolver el proceso al scheduler
+            
+            if(pcb_actual == NULL) {
+                log_error(logger, "ERROR: pcb_actual es NULL después de recibir.");
+                continue;
+            }
+            
+            log_info(logger, "¡PCB recibido! PID: %d", pcb_actual->pid);
+            int desalojar = 0;
             op_code motivo_desalojo = CONTEXTO_PCB;
 
-            //-------------- CICLO DE INSTRUCCION (FETCH -> DECODE -> EXECUTE -> INTERRUPT STAGE)
+            log_info(logger, "Entrando al ciclo de instrucción...");
+            
             while(!desalojar && cpu_corriendo) {
-
-                //--------- ETAPA 1° FETCH (buscar instruccion en Memoria)------------
-                // esperamos la respuesta(el texto de instruccion)
+                log_info(logger, "DEBUG: Voy a llamar a realizar_fetch...");
                 char* instruccion = realizar_fetch(pcb_actual, fd_memoria, logger);
+                log_info(logger, "DEBUG: Volví de realizar_fetch con instrucción: %s", instruccion);
+                
+                if(instruccion == NULL) {
+                    log_error(logger, "ERROR: FETCH devolvió NULL");
+                    break;
+                }
+                
+                log_info(logger, "DEBUG: Instrucción recibida: %s", instruccion);
                 
                 //------ ETAPA 2° DECODE ---------------
                 // cortamos el texto por los espacios. token[0]= Comando, token[1]= parametro1 y asi sucesivamente
@@ -94,7 +108,7 @@ int main(int argc, char* argv[]) {
                 int modifico_pc = 0; // flag para saber si la instruccion altero el pc(ej un salto JNZ)
 
                 //--------- ETAPA 3° EXECUTE(la funcion esta en la carpeta instrucciones) ---------------------------
-                ejecutar_instrucciones(tokens, pcb_actual, &desalojar, &motivo_desalojo, &modifico_pc, logger);
+                ejecutar_instrucciones(tokens, pcb_actual, &desalojar, &motivo_desalojo, &modifico_pc, logger,fd_memoria);
                 
                 // si la instruccion no fue un JNZ, incrementamos el pc para la proxima instruccion
                 if(!modifico_pc) {

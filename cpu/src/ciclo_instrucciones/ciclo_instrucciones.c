@@ -1,18 +1,17 @@
 #include "ciclo_instrucciones.h"
 
 char* realizar_fetch(t_pcb* pcb, int fd_memoria, t_log* logger) {
-    // Le mandamos a Memoria el codigo de operacion, el PID y el PC actual
     op_code op_fetch = FETCH_INSTRUCCION;
+    log_info(logger, "DEBUG: Usando fd_memoria = %d para el FETCH", fd_memoria);
     send(fd_memoria, &op_fetch, sizeof(op_code), 0);
     send(fd_memoria, &(pcb->pid), sizeof(int), 0);
     send(fd_memoria, &(pcb->pc), sizeof(uint32_t), 0);
 
-    // Esperamos la respuesta (el texto de la instruccion)
-    char* instruccion = recibir_mensaje(fd_memoria);
-    log_info(logger, "## PID: %d - FETCH - Program Counter: %d", pcb->pid, pcb->pc);
-    return instruccion;
+    // Al usar recibir_mensaje, esta función espera recibir primero el tamaño 
+    // y luego el buffer de datos, que es exactamente lo que tu nueva 
+    // atender_fetch_cpu está enviando.
+    return recibir_mensaje(fd_memoria);
 }
-
 int hay_interrupcion(int fd_scheduler, t_log* logger) {
     int interrupcion = 0;
     // MSG_DONTWAIT permite ver el socket sin quedarse bloqueado esperando. 
@@ -27,10 +26,12 @@ int hay_interrupcion(int fd_scheduler, t_log* logger) {
 }
 
 void gestionar_desalojo(t_pcb* pcb, op_code motivo, char** tokens, int fd_scheduler) {
-    // Si se rompio el ciclo se le devuelve todo al scheduler
-    enviar_operacion(motivo, fd_scheduler);
+<<<<<<< HEAD
+   
+=======
 
-    // le devolvemos el PCB actualizado (el "contexto")
+    // Le devolvemos el PCB actualizado al Scheduler (el "contexto")
+>>>>>>> 37e58f6b5f68b419d012b60153810e5a33509496
     enviar_pcb(pcb, fd_scheduler, motivo);
     
     // Mandamos los datos extra dependiendo de que Syscall provoco el desalojo
@@ -54,6 +55,28 @@ void gestionar_desalojo(t_pcb* pcb, op_code motivo, char** tokens, int fd_schedu
         send(fd_scheduler, &len_string, sizeof(int), 0);
         send(fd_scheduler, tokens[1], len_string, 0);
     }
+   else if (motivo == SYSCALL_INIT_PROC) {
+        // tokens[1] es el archivo (ej: "MEMORIA_PRE_3.prc")
+        // tokens[2] es la prioridad (ej: "1")
+        
+        int len_string = strlen(tokens[1]) + 1;
+        int prioridad = atoi(tokens[2]); 
 
-    
+        // 1. Avisamos cuánto pesa el string
+        send(fd_scheduler, &len_string, sizeof(int), 0);
+        // 2. Mandamos el string (el nombre del archivo)
+        send(fd_scheduler, tokens[1], len_string, 0);
+        // 3. Mandamos la prioridad
+        send(fd_scheduler, &prioridad, sizeof(int), 0);
+    }
+    else if (motivo == SYSCALL_MEM_ALLOC) {
+        int id_segmento = atoi(tokens[1]);
+        int tam_segmento = atoi(tokens[2]);
+        send(fd_scheduler, &id_segmento, sizeof(int), 0);
+        send(fd_scheduler, &tam_segmento, sizeof(int), 0);
+    }
+    else if (motivo == SYSCALL_MEM_FREE) {
+        int id_segmento = atoi(tokens[1]);
+        send(fd_scheduler, &id_segmento, sizeof(int), 0);
+    }
 }

@@ -1,4 +1,5 @@
 #include "main.h"
+#include "utils/instrucciones/instrucciones.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -27,11 +28,12 @@ int main(int argc, char* argv[]) {
     archivo_swap = fopen(swap_config.swap_file_path, "rb+");
     
     if(archivo_swap == NULL){
-        log_error(logger, "Error al abrir el archivo de Swap en: %s", swap_config.swap_file_path);
-        return EXIT_FAILURE;
+     log_warning(logger, "El archivo de Swap no existia. Creandolo...");
+        // El modo wb+ crea el archivo desde cero para lectura/escritura
+        archivo_swap = fopen(swap_config.swap_file_path, "wb+");
     }
     // servidor: Swap espera conexiones de Kernel Memory
-    int fd_escucha = iniciar_servidor(swap_config.puerto_memoria);
+    int fd_escucha = iniciar_servidor(swap_config.puerto_escucha);
     int socket_memoria = esperar_cliente(fd_escucha);
 
     send(socket_memoria, &swap_config.block_size, sizeof(int), 0);

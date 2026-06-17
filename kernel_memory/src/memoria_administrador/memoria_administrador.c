@@ -1,9 +1,10 @@
 #include "memoria_administrador.h"
-#include "../core/memoria_core.h"
 #include "../main.h"
 
+t_list* tabla_segmentos_global;
+pthread_mutex_t m_memoria;
+void* espacio_memoria_real;
 t_dictionary* mapeo_archivos_procesos;
-
 void inicializar_memoria() {
     tabla_segmentos_global = list_create();
     pthread_mutex_init(&m_memoria, NULL);
@@ -19,8 +20,9 @@ void inicializar_memoria() {
     segmento_inicial -> ocupado = 0;
 
     list_add(tabla_segmentos_global, segmento_inicial);
-    log_info(logger, "## Memoria inicializada. Segmento inicial creado (Base: 0, Tamaño: %d)", memoria_config.memoria_operando);
-    mapeo_archivos_procesos = dictionary_create();
+    log_info(logger, "## Memoria inicializada. Segmento inicial creado (Base: 0, Tamaño: %d)", 
+             memoria_config.memoria_operando);
+             mapeo_archivos_procesos = dictionary_create();
 }
 // funcion best fit: recorre la tabla global y elige el segmento libre mas pequeño que entra el nuevo proceso
 
@@ -114,8 +116,8 @@ void compactar_memoria() {
 // primero, eliminamos los segmentos libres actuales de la lista
     for(int i = list_size(tabla_segmentos_global)-1; i>=0; i--){
         t_segmento_memoria* seg = list_get(tabla_segmentos_global,i);
-        if(seg -> ocupado == 0){
-            list_remove_and_destroy_element(tabla_segmentos_global, i, free);
+        if(seg-> ocupado == 0){
+        list_remove_and_destroy_element(tabla_segmentos_global, i, free);
         }
     }
 

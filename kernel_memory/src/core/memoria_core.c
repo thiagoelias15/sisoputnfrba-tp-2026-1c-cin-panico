@@ -1,13 +1,9 @@
 #include "memoria_core.h"
-#include "../memoria_administrador/memoria_administrador.h"
-#include "../config/config.h"
+#include "memoria_administrador/memoria_administrador.h"
+#include <stdio.h>
+#include <commons/collections/dictionary.h>
 #include "../main.h"
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <commons/collections/dictionary.h>
-#include <utils/utils.h>
 
 // El Kernel avisa que se crea un proceso y nos pasa su archivo real
 void atender_creacion_proceso(int fd_kernel) {
@@ -82,10 +78,14 @@ void atender_fetch_cpu(int fd_cpu) {
     log_info(logger, "## PID: %d - Obtener instrucción: %d", pid, pc);
     usleep(memoria_config.instruction_delay * 1000); 
 
-    // Ahora lee de forma completamente dinámica
     char* instruccion = leer_instruccion_de_archivo(pid, pc);
-    
-    enviar_mensaje(instruccion, FETCH_INSTRUCCION, fd_cpu);
+    int tamaño_instruccion = strlen(instruccion) + 1;
+
+    // Solo enviamos lo que la CPU espera recibir: tamaño + mensaje
+    send(fd_cpu, &tamaño_instruccion, sizeof(int), 0);
+    send(fd_cpu, instruccion, tamaño_instruccion, 0);
+
+    log_info(logger, "DEBUG: Instrucción enviada manualmente.");
     
     if (strcmp(instruccion, "EXIT") != 0) free(instruccion);
 }

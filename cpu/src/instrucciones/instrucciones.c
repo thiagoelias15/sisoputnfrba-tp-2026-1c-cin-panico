@@ -41,6 +41,13 @@ uint32_t obtener_valor_registro(t_pcb* pcb, char* reg) {
     return 0;
 }
 
+int obtener_tamano_registro(char* reg) {
+    if(strcmp(reg, "AX") == 0 || strcmp(reg, "BX") == 0 || strcmp(reg, "CX") == 0 || strcmp(reg, "DX") == 0) return 1;
+    if(strcmp(reg, "EAX") == 0 || strcmp(reg, "EBX") == 0 || strcmp(reg, "ECX") == 0 || strcmp(reg, "EDX") == 0) return 4;
+    if(strcmp(reg, "SI") == 0 || strcmp(reg, "DI") == 0) return 4;
+    return 0;
+}
+
 /* MMU traduce una direccion logica a fisica basandose en segmentacion, divide
 la direccion logica por el tamaño maximo para hallar el id del segmento, luego
 busca ese segmento en la tabla del proceso y verifica que el desplazamiento sea valido.*/
@@ -52,7 +59,7 @@ int traducir_direccion_mmu(uint32_t dir_logica, uint32_t tam_a_leer_escribir, t_
 
     //buscamos el segmento en la tabla de procesos
     t_segmento* segmento_encontrado = NULL;
-    for(int i = 0; i < list_size(pcb->tabla_segmentos); i++){
+    for(int i=0; i < list_size(pcb -> tabla_segmentos); i++){
         t_segmento* seg = list_get(pcb-> tabla_segmentos, i);
         if(seg-> id == num_segmento){
             segmento_encontrado = seg;
@@ -68,7 +75,7 @@ int traducir_direccion_mmu(uint32_t dir_logica, uint32_t tam_a_leer_escribir, t_
     return direccion_fisica;
 }
 
-void ejecutar_instrucciones(char** tokens, t_pcb* pcb, int* desalojar, op_code* motivo, int* modifico_pc, t_log* logger) {
+void ejecutar_instrucciones(char** tokens, t_pcb* pcb, int* desalojar, op_code* motivo, int* modifico_pc, t_log* logger, int fd_memoria) {
     char* comando = tokens[0];
     // Instrucciones matematicas y de registro
     if(strcmp(comando, "SET") == 0) {
@@ -136,5 +143,104 @@ void ejecutar_instrucciones(char** tokens, t_pcb* pcb, int* desalojar, op_code* 
     else if(strcmp(comando, "EXIT") == 0) {
         *desalojar = 1;
         *motivo = SYSCALL_EXIT;
+    }
+    else if(strcmp(comando, "INIT_PROC") == 0) {
+        *desalojar = 1;
+        *motivo = SYSCALL_INIT_PROC; 
+    }
+
+        else if(strcmp(comando, "MEM_ALLOC") == 0) {
+        *desalojar = 1;
+        *motivo = SYSCALL_MEM_ALLOC;
+    }
+    else if(strcmp(comando, "MEM_FREE") == 0) {
+        *desalojar = 1;
+        *motivo = SYSCALL_MEM_FREE;
+    }
+    else if(strcmp(comando, "NOOP") == 0) {
+        // No hace nada, el PC suma 1 al finalizar el ciclo automáticamente 
+    }
+    else if(strcmp(comando, "MOV_IN") == 0) {
+        int tam = obtener_tamano_registro(tokens[1]);
+        int dir_fisica = traducir_direccion_mmu(pcb->si, tam, pcb);
+        if(dir_fisica == -1) {
+            *desalojar = 1;
+            *motivo = SEG_FAULT;
+        } else {
+            // 1. Le pedimos a la memoria que lea
+            op_code op = LEER_MEMORIA;
+            send(fd_memoria, &op, sizeof(op_code), 0);
+            send(fd_memoria, &dir_fisica, sizeof(int), 0);
+            send(fd_memoria, &tam, sizeof(int), 0);
+
+            // 2. Recibimos el dato (inicializamos en 0 por si leemos solo 1 byte)
+            uint32_t valor_leido = 0;
+            recv(fd_memoria, &valor_leido, tam, MSG_WAITALL);
+
+            // 3. Lo guardamos en el registro
+            setear_valor_registro(pcb, tokens[1], valor_leido);
+log_info(logger, "PID: %d - Acción: LEER - Dirección Física: %d - Valor: %d", pcb->pid, dir_fisica, valor_leido);        }
+    }
+    else if(strcmp(comando, "MOV_OUT") == 0) {
+        int tam = obtener_tamano_registro(tokens[1]);
+        int dir_fisica = traducir_direccion_mmu(pcb->di, tam, pcb);
+        if(dir_fisica == -1) {
+            *desalojar = 1;
+            *motivo = SEG_FAULT;
+        } else {
+           // 1. Obtenemos el valor a enviar desde nuestro registro
+            uint32_t valor_a_escribir = obtener_valor_registro(pcb, tokens[1]);
+
+            // 2. Le mandamos la orden de escritura a la memoria
+            op_code op = ESCRIBIR_MEMORIA;
+            send(fd_memoria, &op, sizeof(op_code), 0);
+            send(fd_memoria, &dir_fisica, sizeof(int), 0);
+            send(fd_memoria, &tam, sizeof(int), 0);
+            send(fd_memoria, &valor_a_escribir, tam, 0);
+
+            // 3. Esperamos el OK de la memoria para saber que terminó
+            int confirmacion;
+            recv(fd_memoria, &confirmacion, sizeof(int), MSG_WAITALL);
+log_info(logger, "PID: %d - Acción: ESCRIBIR - Dirección Física: %d - Valor: %d", pcb->pid, dir_fisica, valor_a_escribir);        }
+    }
+    else if(strcmp(comando, "COPY_MEM") == 0) {
+        uint32_t tam = obtener_valor_registro(pcb, tokens[1]);
+        int dir_fisica_origen = traducir_direccion_mmu(pcb->si, tam, pcb);
+        int dir_fisica_destino = traducir_direccion_mmu(pcb->di, tam, pcb);
+        if(dir_fisica_origen == -1 || dir_fisica_destino == -1) {
+            *desalojar = 1;
+            *motivo = SEG_FAULT;
+      } else {
+            // --- PARTE 1: LEER EL ORIGEN ---
+            op_code op_leer = LEER_MEMORIA;
+            send(fd_memoria, &op_leer, sizeof(op_code), 0);
+            send(fd_memoria, &dir_fisica_origen, sizeof(int), 0);
+            send(fd_memoria, &tam, sizeof(int), 0);
+
+            // Creamos un buffer genérico para atajar la copia (pueden ser strings o números)
+            void* buffer_copia = malloc(tam);
+            recv(fd_memoria, buffer_copia, tam, MSG_WAITALL);
+            log_info(logger, "PID: %d - Acción: LEER - Dirección Física: %d - Valor: COPY", pcb->pid, dir_fisica_origen);
+
+            // --- PARTE 2: ESCRIBIR EL DESTINO ---
+            op_code op_escribir = ESCRIBIR_MEMORIA;
+            send(fd_memoria, &op_escribir, sizeof(op_code), 0);
+            send(fd_memoria, &dir_fisica_destino, sizeof(int), 0);
+            send(fd_memoria, &tam, sizeof(int), 0);
+            send(fd_memoria, buffer_copia, tam, 0);
+
+            int confirmacion;
+            recv(fd_memoria, &confirmacion, sizeof(int), MSG_WAITALL);
+            log_info(logger, "PID: %d - Acción: ESCRIBIR - Dirección Física: %d - Valor: COPY", pcb->pid, dir_fisica_destino);
+
+            free(buffer_copia);
+        }
+    }
+
+        // ERRORES DE SINTAXIS
+        else  {
+        log_error(logger, "ERROR DE SINTAXIS: La instruccion '%s' no existe o esta mal escrita.", comando);
+        *desalojar = 1;
+        *motivo = SYSCALL_EXIT; 
     }
 }

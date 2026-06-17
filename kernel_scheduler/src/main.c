@@ -2,6 +2,8 @@
 #include "conexiones/conexiones.h"
 #include "planificador/planificador.h"
 
+int PID_GLOBAL = 0;
+sem_t sem_cpu_libre;
 // Definición de variables globales(en el main.h con extern solo le avisabamos al compiladro que existian pero no estaban definidas)
 t_list* cola_new;
 t_list** colas_ready;
@@ -21,12 +23,11 @@ int scheduler_corriendo = 1;
 
 int main(int argc,char* argv[]) {
     // Se verifica la información en el config
-    if(argc<2) {  
+    if(argc<3) {  
 
-        printf("[ERROR] Mal ejecutado\n");
+     printf("[ERROR] Uso correcto: ./bin/kernel_scheduler [config_path] [script_name.prc]\n");
         return EXIT_FAILURE; 
     }
-
     // Se carga el config, extrayendo la información necesaria para la conexión de módulos.
 
     cargar_configuracion_kernel(argv[1]);
@@ -35,7 +36,7 @@ int main(int argc,char* argv[]) {
 
     // 2. INICIALIZAMOS ESTRUCTURAS
 
-    inicializar_estructuras();
+ inicializar_estructuras();
 
     // ------------------------------ SCHEDULER COMO CLIENTE ------------------------------ //
 
@@ -52,8 +53,8 @@ int main(int argc,char* argv[]) {
 
     //------------------------ Planificacion a largo plazo(proceso 0 o inical) ---------------------------------------
 
-    //el proceso 0 o inicial seria PID 0
-    void crear_proceso_inicial(char* nombre_archivo);
+    
+crear_proceso(argv[2], 0 );
 
     // --------------------------Planificador a corto plazo-------------------------------------//
 
