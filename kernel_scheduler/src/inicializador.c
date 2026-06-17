@@ -1,6 +1,6 @@
 #include "main.h"
 #include <utils/pcb/pcb.h>
-
+extern int PID_GLOBAL;
 void inicializar_estructuras(void) {
     cola_new = list_create();
     
@@ -20,7 +20,7 @@ void inicializar_estructuras(void) {
     for(int i = 0; i < cantidad_colas; i++) {
         colas_ready[i] = list_create();
     }
-
+    sem_init(&sem_cpu_libre, 0 ,1);
     cola_exec = list_create();
     cola_block = list_create();
     cola_exit = list_create();
@@ -33,8 +33,9 @@ void inicializar_estructuras(void) {
     pthread_mutex_init(&m_exit, NULL);
     sem_init(&sem_procesos_ready, 0, 0);
 }
-void crear_proceso_inicial(char* nombre_archivo) {
-    int pid_inicial = 0;
+void crear_proceso(char* nombre_archivo, int prioridad) {
+    int pid_nuevo = PID_GLOBAL;
+    PID_GLOBAL++;
 
     // ------------------- ENVIAR MENSAJE DE CREACIÓN A LA MEMORIA ------------------- //
     op_code cop = SYSCALL_INIT_PROC;
@@ -42,7 +43,7 @@ void crear_proceso_inicial(char* nombre_archivo) {
 
     // Enviamos: Código de operación, el PID y el tamaño del string seguido del string del archivo
     send(fd_memoria, &cop, sizeof(op_code), 0);
-    send(fd_memoria, &pid_inicial, sizeof(int), 0);
+    send(fd_memoria, &pid_nuevo, sizeof(int), 0);
     send(fd_memoria, &tam_nombre, sizeof(uint32_t), 0);
     send(fd_memoria, nombre_archivo, tam_nombre, 0);
 
@@ -50,31 +51,30 @@ void crear_proceso_inicial(char* nombre_archivo) {
     int respuesta_memoria;
     recv(fd_memoria, &respuesta_memoria, sizeof(int), MSG_WAITALL);
     // ------------------------------------------------------------------------------- //
-    t_pcb* pcb_inicial = pcb_create();
-    pcb_inicial->pid = 0;
-    pcb_inicial->pc = 0;
-    pcb_inicial->prioridad = 0; // Prioridad máxima por enunciado
-    pcb_inicial->prioridad_original = 0;
-
-    // Inicializamos los registros en 0
-    pcb_inicial->ax = 0; pcb_inicial->bx = 0; pcb_inicial->cx = 0; pcb_inicial->dx = 0;
-    pcb_inicial->eax = 0; pcb_inicial->ebx = 0; pcb_inicial->ecx = 0; pcb_inicial->edx = 0;
-    pcb_inicial->si = 0; pcb_inicial->di = 0;
-
-    log_info(logger, "## (%d) Se crea el proceso - Estado: NEW", pcb_inicial->pid);
+    t_pcb* pcb_nuevo = pcb_create();
+    pcb_nuevo->pid = pid_nuevo;
+    pcb_nuevo->pc = 0;
+    pcb_nuevo->prioridad = prioridad;
+    pcb_nuevo->prioridad_original = prioridad;
+    
+    log_info(logger, "## (%d) Se crea el proceso - Estado: NEW", pcb_nuevo->pid);
     
     pthread_mutex_lock(&m_new);
-    list_add(cola_new, pcb_inicial);
-    pthread_mutex_unlock(&m_new);
-
-    pthread_mutex_lock(&m_new);
-    t_pcb* pcb_a_ready = list_remove(cola_new, 0);
+    list_add(cola_new, pcb_nuevo);
+   
+    int index_ultimo = list_size(cola_new) -1;
+    t_pcb* pcb_a_ready = list_remove(cola_new, index_ultimo);
     pthread_mutex_unlock(&m_new);
 
     log_info(logger, "## (%d) Pasa del estado NEW a READY", pcb_a_ready->pid); 
 
+    int prio = 0;
+    if(strcmp(kernel_config.algoritmo_planificacion, "CMN")== 0){
+        prio = pcb_a_ready -> prioridad;
+    }
+    
     pthread_mutex_lock(&m_ready);
-    list_add(colas_ready[0], pcb_a_ready);
+    list_add(colas_ready[prio], pcb_a_ready);
     pthread_mutex_unlock(&m_ready);
     
     sem_post(&sem_procesos_ready);

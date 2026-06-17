@@ -4,7 +4,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <sys/socket.h>
-
 t_log* logger;
 int cpu_corriendo = 1;
 int tam_max_segmento= 64; // la memoria nos va a ir actualizando este numero despues
@@ -109,7 +108,7 @@ int main(int argc, char* argv[]) {
                 int modifico_pc = 0; // flag para saber si la instruccion altero el pc(ej un salto JNZ)
 
                 //--------- ETAPA 3° EXECUTE(la funcion esta en la carpeta instrucciones) ---------------------------
-                ejecutar_instrucciones(tokens, pcb_actual, &desalojar, &motivo_desalojo, &modifico_pc, logger);
+                ejecutar_instrucciones(tokens, pcb_actual, &desalojar, &motivo_desalojo, &modifico_pc, logger,fd_memoria);
                 
                 // si la instruccion no fue un JNZ, incrementamos el pc para la proxima instruccion
                 if(!modifico_pc) {

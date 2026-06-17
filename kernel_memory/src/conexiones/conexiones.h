@@ -11,5 +11,6 @@ extern t_log* logger;
 
 // Función que va a ejecutar cada hilo para atender a un cliente específico
 void* atender_cliente(void* arg);
-
+void atender_mem_alloc(int fd_cliente);
+void atender_mem_free(int fd_cliente);
 #endif
