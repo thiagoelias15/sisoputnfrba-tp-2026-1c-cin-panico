@@ -1,8 +1,6 @@
 #ifndef MEMORIA_CORE_H_
 #define MEMORIA_CORE_H_
 
-
-
 #include <stdint.h>
 #include <commons/log.h>
 #include <commons/config.h>

@@ -25,7 +25,7 @@ void* planificador_corto_plazo(void* arg) {
                 break; // encontramos uno paramos la busqueda
             }
         }
-      pthread_mutex_unlock(&m_ready);
+        pthread_mutex_unlock(&m_ready);
         
         // Lo mandamos a ejecutar
         if(pcb_a_ejecutar != NULL) {
@@ -98,7 +98,7 @@ void mover_a_ready(int pid_buscado) { //La función entra a la "sala de espera" 
         
         pcb_a_mover->estado = READY; //actualizamods el estado interno del PCB
         //metemos a la cola de READY especifica de su prioridad
-       int prio;
+        int prio;
         if(strcmp(kernel_config.algoritmo_planificacion, "CMN") == 0) {
             prio = pcb_a_mover->prioridad;
         } else {
