@@ -6,17 +6,18 @@
 // Esta variable se mudó acá para controlar el bucle
 int io_corriendo = 1;
 
-void ejecutar_sleep(int fd_scheduler) {
+void ejecutar_sleep(int fd_scheduler)
+{
 
-    // El SLEEP no necesita tamaño ni dirección de memoria. 
+    // El SLEEP no necesita tamaño ni dirección de memoria.
     // Solo necesita saber cuánto tiempo dormir y a quién.
     int tiempo_ms, pid;
-    
+
     // Recibimos el tiempo en milisegundos y el ID del proceso.
     recv(fd_scheduler, &tiempo_ms, sizeof(int), MSG_WAITALL);
     recv(fd_scheduler, &pid, sizeof(int), MSG_WAITALL);
 
-    //1° Log Obligatorio exigido por el TP
+    // 1° Log Obligatorio exigido por el TP
     log_info(logger, "## PID: %d - Inicio de IO", pid);
 
     // Log Obligatorio específico para SLEEP
@@ -24,86 +25,90 @@ void ejecutar_sleep(int fd_scheduler) {
 
     // La función de C usleep() espera microsegundos.
     // Como nuestra configuración (y lo que nos manda el Kernel) está en milisegundos, lo multiplicamos por 1000.
-    usleep(tiempo_ms * 1000); 
+    usleep(tiempo_ms * 1000);
 
     // El proceso ya descansó lo suficiente, le avisamos al Scheduler que lo despierte (lo pase a READY).
     enviar_mensaje("FIN_IO", MENSAJE, fd_scheduler);
     send(fd_scheduler, &pid, sizeof(int), 0);
 
-    //2° Log Obligatorio exigido por el TP
+    // 2° Log Obligatorio exigido por el TP
     log_info(logger, "## PID: %d - Fin de IO", pid);
 }
 
-void ejecutar_stdin(int fd_scheduler) {
+void ejecutar_stdin(int fd_scheduler)
+{
 
     int tam, dir, pid;
-    
+
     /* Recibimos 3 numeros enteros que nos mando el scheduler: tamaño, direccion y pid y los guardamos.
-    Si se cambia el orden de envio desde el scheduler tambien debemos cambiarlo aqui sino se va a 
+    Si se cambia el orden de envio desde el scheduler tambien debemos cambiarlo aqui sino se va a
     guardar algo en una variable que no corresponde. */
     recv(fd_scheduler, &tam, sizeof(int), MSG_WAITALL);
     recv(fd_scheduler, &dir, sizeof(int), MSG_WAITALL);
-    recv(fd_scheduler, &pid, sizeof(int), MSG_WAITALL); 
+    recv(fd_scheduler, &pid, sizeof(int), MSG_WAITALL);
 
     //  1° Log Obligatorio exigido por el TP
     log_info(logger, "## PID: %d Inicio de IO", pid);
 
-    //  Log Obligatorio específico para STDIN 
+    //  Log Obligatorio específico para STDIN
     log_info(logger, "## PID: %d Ingrese %d caracteres:", pid, tam);
 
     // readline frena el programa y espera a que el usuario escriba y apriete Enter.
-    char* leido = readline("> ");
+    char *leido = readline("> ");
 
     // calloc reserva la memoria y la llena automáticamente de '\0' (barra cero).
     // Así nos ahorramos tener que rellenar a mano con un bucle if/for si el usuario escribe de menos.
-    char* buffer_a_devolver = calloc(tam, sizeof(char));
+    char *buffer_a_devolver = calloc(tam, sizeof(char));
 
-    if (leido != NULL) {
+    if (leido != NULL)
+    {
         int longitud_leida = strlen(leido);
 
         // [Lógica de truncado o copia directa
-        if (longitud_leida > tam) {
+        if (longitud_leida > tam)
+        {
             // Si escribió de más, truncamos copiando exactamente 'tam' bytes.
             memcpy(buffer_a_devolver, leido, tam);
-        } else {
-            // Si escribió de menos (o lo justo), copiamos lo que escribió. 
+        }
+        else
+        {
+            // Si escribió de menos (o lo justo), copiamos lo que escribió.
             // El resto del buffer_a_devolver ya quedó en '\0' gracias al calloc.
             memcpy(buffer_a_devolver, leido, longitud_leida);
         }
         free(leido); // Liberamos la lectura temporal de readline
     }
 
-    // [Le mandamos los bytes crudos (exactamente la cantidad 'tam') al Scheduler
-    // IMPORTANTE: Como la cadena puede estar rellena de múltiples '\0', funciones como strlen() 
-    // fallarían. Por eso mandamos el buffer crudo usando directamente el 'tam' que ya conocemos.
-    send(fd_scheduler, buffer_a_devolver, tam, 0);
-
-    // ahora vendria la devolucion, primero hay que avisarle al scheduler que termino con la etiqueta FIN_IO y luego le mandamos la informacion,PID del proceso que scheduler debe sacar de BLOCK y mover a READY
-    enviar_mensaje("FIN_IO", MENSAJE, fd_scheduler);
+   // Le devolvemos el paquete al Scheduler avisándole que es una respuesta de STDIN
+    op_code op_respuesta = SYSCALL_STDIN;
+    send(fd_scheduler, &op_respuesta, sizeof(op_code), 0);
     send(fd_scheduler, &pid, sizeof(int), 0);
+    send(fd_scheduler, &dir, sizeof(int), 0); // Le devolvemos la dir que nos había prestado
+    send(fd_scheduler, &tam, sizeof(int), 0);
+    send(fd_scheduler, buffer_a_devolver, tam, 0); // Mandamos los bytes crudos
 
     // 2° Log Obligatorio exigido por el TP
-    log_info(logger, "## PID: %d Fin de IO", pid);
+    log_info(logger, "## PID: %d - Fin de IO", pid);
 
-    // Limpiamos la memoria del buffer que creamos
     free(buffer_a_devolver);
 }
 
 // Función aislada para manejar específicamente STDOUT
-void ejecutar_stdout(int fd_scheduler) {
+void ejecutar_stdout(int fd_scheduler)
+{
 
     int pid;
-    /* Recibimos el numero entero que nos mando el scheduler y lo guardamos en su variable correspondiente, 
-    si se cambia el orden de envio desde el scheduler tambien debemos cambiarlo aqui sino se va a 
+    /* Recibimos el numero entero que nos mando el scheduler y lo guardamos en su variable correspondiente,
+    si se cambia el orden de envio desde el scheduler tambien debemos cambiarlo aqui sino se va a
     guardar algo en una variable que no corresponde ya que no reconoce sino que las guarda por orden de llegada*/
-    
+
     // PID es el id del proceso(un numero entero para que sea mas simple el manejo de tantos procesos al mismo tiempo)
-    // como sabemos WAITALL hace que el socket espere a recibir todos los bytes ya que a veces llegan por ejemplo 2 bytes y con una diferencia de milisegundos los otros 2 pero el socket ya guardo solo los primero 2 bytes esto nos evita ese error 
+    // como sabemos WAITALL hace que el socket espere a recibir todos los bytes ya que a veces llegan por ejemplo 2 bytes y con una diferencia de milisegundos los otros 2 pero el socket ya guardo solo los primero 2 bytes esto nos evita ese error
     recv(fd_scheduler, &pid, sizeof(int), MSG_WAITALL);
 
     // [Como dicta el enunciado, KernelMemory ya buscó el texto en la memoria física,
     // y el Scheduler nos manda directamente el string armado. Lo recibimos así:
-    char* texto_a_imprimir = recibir_mensaje(fd_scheduler);
+    char *texto_a_imprimir = recibir_mensaje(fd_scheduler);
 
     // 1° Log Obligatorio exigido por el TP
     log_info(logger, "## PID: %d - Inicio de IO", pid);
@@ -124,56 +129,63 @@ void ejecutar_stdout(int fd_scheduler) {
 }
 
 //-------------------------------------------- Bucle de conexion con el scheduler ----------------------
-void atender_peticiones_io(int fd_scheduler) {
+void atender_peticiones_io(int fd_scheduler)
+{
 
-    //con while(1) se queda en un bucle infinito esperando que el scheduler le asigne algo para hacer
-    while(io_corriendo) {
-        
-        //1° La IO va a escuchar el codigo de operacion.La funcion frena el hilo hasta que le llegue algo por el socket
+    // con while(1) se queda en un bucle infinito esperando que el scheduler le asigne algo para hacer
+    while (io_corriendo)
+    {
+
+        // 1° La IO va a escuchar el codigo de operacion.La funcion frena el hilo hasta que le llegue algo por el socket
         op_code cod_op = recibir_operacion(fd_scheduler);
 
-        //si recibir operacion recibe -1 es porque se corto la conexion( se puede haber cerrado o crasheado el scheduler)
-        if(cod_op == -1) {
+        // si recibir operacion recibe -1 es porque se corto la conexion( se puede haber cerrado o crasheado el scheduler)
+        if (cod_op == -1)
+        {
             log_error(logger, "El scheduler se desconecto de forma abrupta.Cerrando conexion");
             break; // ponemos break para romper el ciclo infinto y que salga para ir directo a la limpieza
         }
 
         // segun el codigo de operacion que nos mando el scheduler la IO decide que tiene que hacer
-        switch(cod_op) {
+        switch (cod_op)
+        {
 
-            case SYSCALL_STDOUT: {
-                // el scheduler manda un texto diciendo STDOUT con la funcion enviar_mensaje y la IO lo recibe
-                // una vez que recibio y sabe lo que tiene que hacer lo borramos para dejarlo preparado para recibir otro mensaje
-                char* msg_aviso = recibir_mensaje(fd_scheduler);
-                free(msg_aviso); //como dijimos limpiamos el texto que recibio la IO
+        case SYSCALL_STDOUT:
+        {
+            // el scheduler manda un texto diciendo STDOUT con la funcion enviar_mensaje y la IO lo recibe
+            // una vez que recibio y sabe lo que tiene que hacer lo borramos para dejarlo preparado para recibir otro mensaje
+            char *msg_aviso = recibir_mensaje(fd_scheduler);
+            free(msg_aviso); // como dijimos limpiamos el texto que recibio la IO
 
-                // Saltamos a la función modularizada para ejecutar la lógica limpia
-                ejecutar_stdout(fd_scheduler);
-                break;
-            }
+            // Saltamos a la función modularizada para ejecutar la lógica limpia
+            ejecutar_stdout(fd_scheduler);
+            break;
+        }
 
-            case SYSCALL_STDIN: {
-                char* msg_aviso = recibir_mensaje(fd_scheduler);
-                free(msg_aviso); // limpiamos el texto que recibio la IO
-    
-                // Saltamos a la función modularizada
-                 ejecutar_stdin(fd_scheduler);
-                 break;
-                }
+        case SYSCALL_STDIN:
+        {
+            char *msg_aviso = recibir_mensaje(fd_scheduler);
+            free(msg_aviso); // limpiamos el texto que recibio la IO
 
-            case SYSCALL_SLEEP: {
-                char* msg_aviso = recibir_mensaje(fd_scheduler);
-                free(msg_aviso);// Limpiamos el texto de aviso.
+            // Saltamos a la función modularizada
+            ejecutar_stdin(fd_scheduler);
+            break;
+        }
 
-                //Saltamos a la función modularizada para ejecutar la espera
-                ejecutar_sleep(fd_scheduler);
-                break;
-                }
-            
-            default:
-                // Si llega basura por el socket o una operación que no existe, caemos acá en vez de romper el programa.
-                log_warning(logger, "Operación desconocida recibida del Scheduler. Código: %d", cod_op);
-                break;
+        case SYSCALL_SLEEP:
+        {
+            char *msg_aviso = recibir_mensaje(fd_scheduler);
+            free(msg_aviso); // Limpiamos el texto de aviso.
+
+            // Saltamos a la función modularizada para ejecutar la espera
+            ejecutar_sleep(fd_scheduler);
+            break;
+        }
+
+        default:
+            // Si llega basura por el socket o una operación que no existe, caemos acá en vez de romper el programa.
+            log_warning(logger, "Operación desconocida recibida del Scheduler. Código: %d", cod_op);
+            break;
         }
     } // Fin del while(io_corriendo)
 }
