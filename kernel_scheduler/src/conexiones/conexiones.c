@@ -51,8 +51,6 @@ void *atender_cliente(void *arg)
                 break;
             }
 
-        
-
             case SEG_FAULT:
             {
                 log_info(logger, "## (%d) Pasa del estado EXEC al estado EXIT", pcb_upd->pid);
@@ -210,13 +208,14 @@ void *atender_cliente(void *arg)
             case SYSCALL_STDIN:
             {
 
-                int tam, dir; // Recibimos de la CPU los parámetros necesarios: tamaño y dirección física
+                int tam, dir, pid_sobrante; // Recibimos de la CPU los parámetros necesarios: tamaño y dirección física
                 // Recibimos de forma bloqueante el tamaño del buffer que STDIN debe leer
                 // MSG_WAITALL asegura que no continúe hasta recibir los 4 bytes del int
                 recv(fd_cpu, &tam, sizeof(int), MSG_WAITALL);
                 // Recibimos la dirección física de memoria donde se debe escribir lo ingresado
                 // Esta información la envía la CPU tras traducir la dirección lógica
                 recv(fd_cpu, &dir, sizeof(int), MSG_WAITALL);
+                recv(fd_cpu, &pid_sobrante, sizeof(int), MSG_WAITALL);
                 log_info(logger, "##(%d) Solicitó syscall: STDIN", pcb_upd->pid);
                 log_info(logger, "##(%d) Pasa del estado EXEC al estado BLOCK", pcb_upd->pid);
                 pthread_mutex_lock(&m_block);   // Bloquea acceso a cola de bloqueados
@@ -243,14 +242,25 @@ void *atender_cliente(void *arg)
             case SYSCALL_STDOUT:
             {
 
-                int tam, dir;
+                int tam, dir, pid_sobrante;
                 recv(fd_cpu, &tam, sizeof(int), MSG_WAITALL); // Recibe tamaño a mostrar desde CPU
                 recv(fd_cpu, &dir, sizeof(int), MSG_WAITALL); // Recibe dirección física de orígen
+                recv(fd_cpu, &pid_sobrante, sizeof(int), MSG_WAITALL);
                 log_info(logger, "##(%d) Solicitó syscall: STDOUT", pcb_upd->pid);
                 log_info(logger, "##(%d) Pasa del estado EXEC al estado BLOCK", pcb_upd->pid); // Como toda operación de I/O es lenta, el proceso no puede seguir en la CPU. Se lo mueve de EXEC a BLOCK.
                 pthread_mutex_lock(&m_block);                                                  // Protege la cola de bloqueados
                 list_add(cola_block, pcb_upd);                                                 // Mueve el PCB a estado bloqueado
                 pthread_mutex_unlock(&m_block);                                                // Libera la protección de la cola
+
+                // 1. EL SCHEDULER LE PIDE LA INFO A MEMORIA
+                op_code op_leer = LEER_MEMORIA;
+                send(fd_memoria, &op_leer, sizeof(op_code), 0);
+                send(fd_memoria, &dir, sizeof(int), 0);
+                send(fd_memoria, &tam, sizeof(int), 0);
+
+                // Preparamos un buffer y recibimos el texto
+                char *texto_de_memoria = calloc(tam + 1, sizeof(char)); // +1 para el '\0'
+                recv(fd_memoria, texto_de_memoria, tam, MSG_WAITALL);
 
                 /*Si hay una interfaz conectada , el Kernel le envía un mensaje avisando que hay una tarea de STDOUT.
                 Le pasa el tamaño, la dirección y el PID del proceso para que la interfaz sepa a quién pertenece la operación*/
@@ -260,15 +270,19 @@ void *atender_cliente(void *arg)
 
                     int socket_stdout = (int)(intptr_t)dictionary_get(dic_interfaces, "STDOUT"); // intptr_t es de una biblioteca stdin.h y lo que hace es una variable que se asegura que el dato tenga el mismo tamaño en bytes que el puntero para que no tire error
                     enviar_mensaje("STDOUT", SYSCALL_STDOUT, socket_stdout);
-                    send(socket_stdout, &tam, sizeof(int), 0);
-                    send(socket_stdout, &dir, sizeof(int), 0);
                     send(socket_stdout, &(pcb_upd->pid), sizeof(int), 0);
+                    // En lugar de enviar_mensaje, mandamos los paquetes crudos
+                    // para que encajen perfecto en el recibir_mensaje de la I/O
+                    int tam_texto = tam + 1; // +1 por el '\0' final
+                    send(socket_stdout, &tam_texto, sizeof(int), 0);
+                    send(socket_stdout, texto_de_memoria, tam_texto, 0);
                 }
                 else
                 {
                     log_error(logger, "La interfaz STDOUT no está conectada.");
                 }
 
+                free(texto_de_memoria);
                 break;
             }
             case SYSCALL_INIT_PROC:
@@ -396,6 +410,9 @@ void *atender_cliente(void *arg)
             }
 
             default:
+
+                log_error(logger, "CUIDADO: Llegó un motivo desconocido desde la CPU. Código: %d", cod_op);
+
                 break; // si no es ninguno de los anteriores casos sale del switch y sigue con el codigo que esta abajo
             }
         }
@@ -438,6 +455,35 @@ void *atender_cliente(void *arg)
                 }
 
                 free(resp);
+            }
+            if (cod_op == SYSCALL_STDIN) // bloque para recibir la lectrua de teclado
+            {
+                int pid_fin, dir_fisica, tam_buffer;
+
+                // Leemos exactamente lo que la IO nos mandó
+                recv(socket_cliente, &pid_fin, sizeof(int), MSG_WAITALL);
+                recv(socket_cliente, &dir_fisica, sizeof(int), MSG_WAITALL);
+                recv(socket_cliente, &tam_buffer, sizeof(int), MSG_WAITALL);
+
+                void *buffer_leido = malloc(tam_buffer);
+                recv(socket_cliente, buffer_leido, tam_buffer, MSG_WAITALL);
+
+                // 1. El Scheduler hace de cadete y guarda el texto en Memoria
+                op_code op_mem = ESCRIBIR_MEMORIA;
+                send(fd_memoria, &op_mem, sizeof(op_code), 0);
+                send(fd_memoria, &dir_fisica, sizeof(int), 0);
+                send(fd_memoria, &tam_buffer, sizeof(int), 0);
+                send(fd_memoria, buffer_leido, tam_buffer, 0);
+
+                // 2. Esperamos la confirmación (OK) de la memoria
+                int confirmacion;
+                recv(fd_memoria, &confirmacion, sizeof(int), MSG_WAITALL);
+
+                free(buffer_leido);
+
+                // 3. Despertamos al proceso para que vuelva a la CPU
+                log_info(logger, "## (%d) finalizo IO (STDIN) y paso a READY", pid_fin);
+                mover_a_ready(pid_fin);
             }
         }
     }
