@@ -28,7 +28,13 @@ int hay_interrupcion(int fd_scheduler, t_log* logger) {
 void gestionar_desalojo(t_pcb* pcb, op_code motivo, char** tokens, int fd_scheduler) {
 
     // Le devolvemos el PCB actualizado al Scheduler (el "contexto")
-
+log_info(logger,
+    "ENVIO PCB -> PID=%d AX=%u BX=%u PC=%u motivo=%d",
+    pcb->pid,
+    pcb->ax,
+    pcb->bx,
+    pcb->pc,
+    motivo);
     enviar_pcb(pcb, fd_scheduler, motivo);
     
     // Mandamos los datos extra dependiendo de que Syscall provoco el desalojo
