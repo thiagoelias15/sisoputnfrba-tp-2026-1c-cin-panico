@@ -67,9 +67,12 @@ void* temporizador_quantum(void* arg) {
     
     t_pcb* pcb = (t_pcb*)arg; //aca le decimos al compilador que trate a ese arg como un puntero a un pcb para leer el PID
     usleep(kernel_config.quantum_rr * 1000); //la funcion usleep espera una x cantidad de microsegundos y por mil para pasar esos microsegundos a milisegundos
+       if (pcb_en_ejecucion != NULL &&
+        pcb_en_ejecucion->pid == pcb->pid) {
     log_info(logger,"## (%d) Desalojo de quantum",pcb->pid);
     op_code interrupcion = INTERRUPCION;
     send(fd_cpu, &interrupcion, sizeof(op_code), 0);
+    }
     return NULL;
 }
 
