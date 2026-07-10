@@ -349,6 +349,19 @@ void *atender_cliente(void *arg)
                 send(fd_memoria, &id_segmento, sizeof(int), 0);
                 send(fd_memoria, &tam_segmento, sizeof(int), 0);
 
+                //KM contesta si es -1 -> necesita compactar
+                // si es >= a 0 -> no necesita
+                int primer_respuesta;
+                recv(fd_memoria, &primer_respuesta, sizeof(int), MSG_WAITALL);
+                if(primer_respuesta == -1){
+                    //KM necesita que desalojemos todas las CPUs
+                    int ok = 1;
+                    send(fd_memoria, &ok, sizeof(int), 0);
+                    //esperamos que KM compacte
+                    int fin_compactacion;
+                    recv(fd_memoria, &fin_compactacion, sizeof(int), MSG_WAITALL);
+                    log_info(logger," ## Fin de compactacion");
+                }
                 // 2. Esperamos que la Memoria haga su magia y nos devuelva la Dirección Base
                 uint32_t direccion_base;
                 recv(fd_memoria, &direccion_base, sizeof(uint32_t), MSG_WAITALL);

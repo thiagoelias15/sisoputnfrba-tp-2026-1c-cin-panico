@@ -199,54 +199,44 @@ void atender_mem_alloc(int fd_cliente) {
 
     // 1. Usamos función asignar_memoria (que ya hace el Best Fit)
     int id_asignado = asignar_memoria(pid, tam_segmento);
-    
-    uint32_t direccion_base = 0;
+    if(id_asignado != -1){
+        //le avisamos al scheduler que se necesita compactar
+        int necesita_compactar = -1;
+        send(fd_cliente, &necesita_compactar, sizeof(int), 0);
+        //esperamos que el scheduler desaloje las CPUs y nos confirme
+        int confirmacion;
+        recv(fd_cliente, &confirmacion, sizeof(int), MSG_WAITALL);
+        log_info(logger,"## Inicio de compactacion");
+        compactar_memoria();
+        log_info(logger,"## Fin de compactacion");
+        //le avisamos que terminamos de compactar
+        int fin_compactacion = 1;
+        send(fd_cliente, &fin_compactacion, sizeof(int), 0);
+        //reintentamos asignar memoria
+        id_asignado = asignar_memoria(pid, tam_segmento);
+    }
+     uint32_t direccion_base = 999999;
 
-    if (id_asignado != -1) {
-        // 2. Si encontró hueco, buscamos cuál es la dirección base que le asignó
+    if(id_asignado != -1) {
         pthread_mutex_lock(&m_memoria);
         for(int i = 0; i < list_size(tabla_segmentos_global); i++) {
             t_segmento_memoria* seg = list_get(tabla_segmentos_global, i);
-            // Buscamos el segmento de este PID que tenga el tamaño que acabamos de asignar
             if(seg->pid == pid && seg->tamanio == tam_segmento) {
-                // Le forzamos el ID que nos pidió el Scheduler
-                seg->id = id_segmento; 
+                seg->id = id_segmento;
                 direccion_base = seg->base;
                 break;
             }
         }
         pthread_mutex_unlock(&m_memoria);
+        log_info(logger, "## PID: %d - Segmento Creado %d - Tamaño: %d - Base: %d", pid, id_segmento, tam_segmento, direccion_base);
     } else {
-        // Si no hay hueco, su enunciado probablemente les pida compactar
-        log_warning(logger, "No hay espacio. Iniciando compactación...");
-        compactar_memoria();
-        
-        // Intentamos asignar de nuevo después de compactar
-        id_asignado = asignar_memoria(pid, tam_segmento);
-        if (id_asignado != -1) {
-            pthread_mutex_lock(&m_memoria);
-            for(int i = 0; i < list_size(tabla_segmentos_global); i++) {
-                t_segmento_memoria* seg = list_get(tabla_segmentos_global, i);
-                if(seg->pid == pid && seg->tamanio == tam_segmento) {
-                    seg->id = id_segmento; 
-                    direccion_base = seg->base;
-                    break;
-                }
-            }
-            pthread_mutex_unlock(&m_memoria);
-        } else {
-            // Si después de compactar tampoco entra, el sistema explotó por falta de RAM
-            log_error(logger, "Out of Memory. Imposible crear segmento.");
-            // Mandamos una dirección "imposible" para que el Scheduler sepa que falló
-            direccion_base = 999999; 
-        }
+        log_error(logger, "Out of Memory incluso después de compactar.");
     }
 
-    // 3. Devolvemos la dirección base real al Scheduler
+    // Mandamos la dirección base real (si no hubo compactación, es la primera respuesta;
+    // si hubo compactación, es la tercera)
     send(fd_cliente, &direccion_base, sizeof(uint32_t), 0);
 }
-
-
 void atender_mem_free(int fd_cliente) {
     uint32_t pid;
     int id_segmento;
