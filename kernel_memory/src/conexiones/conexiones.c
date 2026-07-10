@@ -3,6 +3,7 @@
 #include "../memoria_administrador/memoria_administrador.h"
 extern t_list* tabla_segmentos_global;
 extern pthread_mutex_t m_memoria;
+int fd_scheduler_global = -1;
 void* atender_cliente(void* arg) {
 
     int fd_cliente = *(int*)arg;
@@ -122,6 +123,10 @@ void* atender_cliente(void* arg) {
             }
             pthread_mutex_unlock(&m_sticks);
         }
+        if(strcmp(id_modulo, "SCHEDULER")== 0){
+            log_info(logger, "## Kernel Scheduler Conectado - FD del socket: &d", fd_cliente);
+            fd_scheduler_global = fd_cliente;
+        }
 
         free(id_modulo);
     }
@@ -158,6 +163,15 @@ void* atender_cliente(void* arg) {
             case SYSCALL_MEM_FREE:
                 atender_mem_free(fd_cliente);
                 break;
+            case SYSCALL_EXIT: {
+                int pid;
+                recv(fd_cliente, &pid, sizeof(int), MSG_WAITALL);
+                log_info(logger, "## PID: &d - Liberando todos los segmentos por EXIT", pid);
+                liberando_todos_los_segmentos(pid);
+                int ok = 1;
+                send(fd_cliente, &ok, sizeof(int), 0);
+                break;
+            }
             case -1:
                 log_error(logger, "Un cliente se desconecto.");
                 conectado = 0;

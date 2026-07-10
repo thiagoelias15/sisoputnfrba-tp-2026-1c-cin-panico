@@ -148,71 +148,83 @@ void compactar_memoria() {
 }
 
 //funcion que busca a que stick pertenece una direccion global y le pidea que lea
-    void leer_de_sticks(uint32_t dir_global, void* buffer, uint32_t tamanio){
-        pthread_mutex_lock(&m_sticks);
+   void leer_de_sticks(uint32_t dir_global, void* buffer, uint32_t tamanio) {
+    pthread_mutex_lock(&m_sticks);
 
-        uint32_t bytes_leidos = 0;
-        while(bytes_leidos < tamanio){
-            //buscar que stick tiene la direccion actual
-            uint32_t dir_actual = dir_global + bytes_leidos;
-            t_memory_stick_info* stick = NULL;
-            for(int i = 0; i < list_size(lista_sticks); i++){
-                t_memory_stick_info* s = list_get(lista_sticks, i);
-                if(dir_actual >= s->base_global && dir_actual < s->base_global + s->tamanio){
-                    stick = s;
-                    break;
-                }
-            }
+    uint32_t bytes_leidos = 0;
+    while(bytes_leidos < tamanio) {
+        uint32_t dir_actual = dir_global + bytes_leidos;
+        t_memory_stick_info* stick = buscar_stick(dir_actual);
+
         uint32_t dir_local = dir_actual - stick->base_global;
         uint32_t espacio_en_stick = stick->tamanio - dir_local;
-        uint32_t bytes_a_leer = tamanio - bytes_leidos;
-        if(bytes_a_leer > espacio_en_stick) bytes_a_leer = espacio_en_stick;
-            op_code op = LEER_MEMORIA;
-            send(stick->fd_socket,&op, sizeof(op_code),0);
-            int dir_l = (int)dir_local;
-            int tam_l = (int)bytes_a_leer;
-            send(stick->fd_socket, &dir_l, sizeof(int), 0);
-            send(stick->fd_socket, &tam_l, sizeof(int), 0);
-            recv(stick->fd_socket, buffer + bytes_leidos, bytes_a_leer, MSG_WAITALL);
-            bytes_leidos += bytes_a_leer;
+        uint32_t cuanto_leer = tamanio - bytes_leidos;
+        if(cuanto_leer > espacio_en_stick) cuanto_leer = espacio_en_stick;
+
+        op_code op = LEER_MEMORIA;
+        int d = (int)dir_local;
+        int t = (int)cuanto_leer;
+
+        if(send(stick->fd_socket, &op, sizeof(op_code), 0) <= 0 ||
+           send(stick->fd_socket, &d, sizeof(int), 0) <= 0 ||
+           send(stick->fd_socket, &t, sizeof(int), 0) <= 0 ||
+           recv(stick->fd_socket, buffer + bytes_leidos, cuanto_leer, MSG_WAITALL) <= 0) {
+            
+            log_error(logger, "## Memory Stick desconectado! Memoria corrupta");
+            pthread_mutex_unlock(&m_sticks);
+            
+            // Avisarle al Scheduler
+            if(fd_scheduler_global != -1) {
+                op_code alerta = MEMORIA_CORRUPTA;
+                send(fd_scheduler_global, &alerta, sizeof(op_code), 0);
+            }
+            return;
+        }
+
+        bytes_leidos += cuanto_leer;
     }
-    pthread_mutex_unlock(&m_sticks);    
+
+    pthread_mutex_unlock(&m_sticks);
 }
 
 // busca a que stick pertenece una direccion global y le pide que excriba
-    void escribir_en_sticks(uint32_t dir_global, void* buffer, uint32_t tamanio){
-        pthread_mutex_lock(&m_sticks);
-        uint32_t bytes_escritos = 0;
+   void escribir_en_sticks(uint32_t dir_global, void* datos, uint32_t tamanio) {
+    pthread_mutex_lock(&m_sticks);
+
+    uint32_t bytes_escritos = 0;
     while(bytes_escritos < tamanio) {
         uint32_t dir_actual = dir_global + bytes_escritos;
-        t_memory_stick_info* stick = NULL;
-        for(int i = 0; i < list_size(lista_sticks); i++) {
-            t_memory_stick_info* s = list_get(lista_sticks, i);
-            if(dir_actual >= s->base_global && dir_actual < s->base_global + s->tamanio) {
-                stick = s;
-                break;
-            }
-        }
+        t_memory_stick_info* stick = buscar_stick(dir_actual);
 
         uint32_t dir_local = dir_actual - stick->base_global;
         uint32_t espacio_en_stick = stick->tamanio - dir_local;
-        uint32_t bytes_a_escribir = tamanio - bytes_escritos;
-        if(bytes_a_escribir > espacio_en_stick) bytes_a_escribir = espacio_en_stick;
+        uint32_t cuanto_escribir = tamanio - bytes_escritos;
+        if(cuanto_escribir > espacio_en_stick) cuanto_escribir = espacio_en_stick;
 
         op_code op = ESCRIBIR_MEMORIA;
-        send(stick->fd_socket, &op, sizeof(op_code), 0);
-        int dir_l = (int)dir_local;
-        int tam_l = (int)bytes_a_escribir;
-        send(stick->fd_socket, &dir_l, sizeof(int), 0);
-        send(stick->fd_socket, &tam_l, sizeof(int), 0);
-        send(stick->fd_socket, datos + bytes_escritos, bytes_a_escribir, 0);
+        int d = (int)dir_local;
+        int t = (int)cuanto_escribir;
 
-        // Esperar confirmación (el stick manda enviar_mensaje "OK")
-        recibir_operacion(stick->fd_socket);  // op_code del MENSAJE
+        if(send(stick->fd_socket, &op, sizeof(op_code), 0) <= 0 ||
+           send(stick->fd_socket, &d, sizeof(int), 0) <= 0 ||
+           send(stick->fd_socket, &t, sizeof(int), 0) <= 0 ||
+           send(stick->fd_socket, datos + bytes_escritos, cuanto_escribir, 0) <= 0) {
+            
+            log_error(logger, "## Memory Stick desconectado! Memoria corrupta");
+            pthread_mutex_unlock(&m_sticks);
+            
+            if(fd_scheduler_global != -1) {
+                op_code alerta = MEMORIA_CORRUPTA;
+                send(fd_scheduler_global, &alerta, sizeof(op_code), 0);
+            }
+            return;
+        }
+
+        recibir_operacion(stick->fd_socket);
         char* ok = recibir_mensaje(stick->fd_socket);
         free(ok);
 
-        bytes_escritos += bytes_a_escribir;
+        bytes_escritos += cuanto_escribir;
     }
 
     pthread_mutex_unlock(&m_sticks);

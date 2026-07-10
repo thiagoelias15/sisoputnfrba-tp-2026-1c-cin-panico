@@ -45,6 +45,13 @@ void *atender_cliente(void *arg)
 
                 log_info(logger, "## (%d) Solicito syscall: EXIT", pcb_upd->pid);
                 log_info(logger, "## (%d) Pasa del estado EXEC al estado EXIT", pcb_upd->pid);
+                
+                //avisarle a la memory que libere los segmentos de ese proceso
+                op_code op_exit = SYSCALL_EXIT;
+                send(fd_memoria, &op_exit, sizeof(op_code), 0);
+                send(fd_memoria, &(pcb_upd->pid), sizeof(int), 0);
+                int confirmacion;
+                recv(fd_memoria, &confirmacion, sizeof(int), MSG_WAITALL);
                 log_info(logger, "## (%d) finalizó su ejecución", pcb_upd->pid);
                 list_add(cola_exit, pcb_upd);
                 sem_post(&sem_procesos_ready); // La CPU queda libre
@@ -54,6 +61,13 @@ void *atender_cliente(void *arg)
             case SEG_FAULT:
             {
                 log_info(logger, "## (%d) Pasa del estado EXEC al estado EXIT", pcb_upd->pid);
+
+                //avisamos a la memory que libere los segmentos de ese proceso
+                op_code op_exit = SYSCALL_EXIT;
+                send(fd_memoria, &op_exit, sizeof(op_code), 0);
+                send(fd_memoria, &(pcb_upd->pid), sizeof(int), 0);
+                int confirmacion;
+                recv(fd_memoria, &confirmacion, sizeof(int), MSG_WAITALL);
                 log_info(logger, "## (%d) finalizó su ejecución por SEG_FAULT", pcb_upd->pid);
 
                 // lo matamos

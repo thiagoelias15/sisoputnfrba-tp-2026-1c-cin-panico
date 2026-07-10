@@ -49,7 +49,8 @@ typedef enum {
     ESCRIBIR_MEMORIA = 20,
     SWAP_LECTURA = 21,
     SWAP_ESCRITURA = 22,
-    NUEVO_STICK=23
+    NUEVO_STICK=23,
+    MEMORIA_CORRUPTA=24
 } op_code;
 
 // Funciones para enviar y recibir mensajes y PCBs
