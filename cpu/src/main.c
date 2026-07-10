@@ -6,7 +6,7 @@
 #include <sys/socket.h>
 t_log* logger;
 int cpu_corriendo = 1;
-int tam_max_segmento= 64; // la memoria nos va a ir actualizando este numero despues
+
 
 int main(int argc, char* argv[]) { 
     // La variable "argc" almacena la cantidad de palabras en la terminal, mientras que "argv[numero]" almacena la palabra en dicha posición.
