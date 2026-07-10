@@ -33,20 +33,25 @@ int main(int argc, char* argv[]) {
     }
     // ------------------------------ CONEXIONES ------------------------------ //
 
+int fd_escucha = iniciar_servidor(ms_config.puerto_escucha);
+    log_info(logger, "Memory Stick listo. Escuchando en puerto %s", ms_config.puerto_escucha);
+
+    // DESPUÉS nos conectamos a KM
     int fd_memoria = crear_conexion(ms_config.ip_memoria, ms_config.puerto_memoria);
     
     if(fd_memoria != -1) {
         enviar_mensaje(ms_config.id_modulo, MENSAJE, fd_memoria);
         send(fd_memoria, &tamanio_memoria, sizeof(int), 0);
-        
+
         int len_ip = strlen(ms_config.ip_escucha) + 1;
         send(fd_memoria, &len_ip, sizeof(int), 0);
         send(fd_memoria, ms_config.ip_escucha, len_ip, 0);
-        //le manda el puerto escucha a KM para que se la pase a CPU
+
         int len_puerto = strlen(ms_config.puerto_escucha) + 1;
         send(fd_memoria, &len_puerto, sizeof(int), 0);
         send(fd_memoria, ms_config.puerto_escucha, len_puerto, 0);
-        log_info(logger, "Memory Stick conectado a Kernel Memory");
+
+        log_info(logger, "## Conectado a Kernel Memory");
     } else {
         log_error(logger, "No se pudo conectar a memoria");
         free(espacio_memoria);
@@ -54,11 +59,9 @@ int main(int argc, char* argv[]) {
         log_destroy(logger);
         return EXIT_FAILURE;
     }
-        // Servidor para las CPUs
-        int fd_escucha = iniciar_servidor(ms_config.puerto_escucha);
-        log_info(logger, "Memory Stick listo. Escuchando en puerto %s", ms_config.puerto_escucha);
-        
-           while(ms_corriendo) {
+
+    // Escuchamos conexiones de CPUs y KM
+    while(ms_corriendo) {
         int* socket_cliente = malloc(sizeof(int));
         *socket_cliente = esperar_cliente(fd_escucha);
     

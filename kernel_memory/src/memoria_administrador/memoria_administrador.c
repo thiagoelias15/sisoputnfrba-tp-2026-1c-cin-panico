@@ -168,7 +168,11 @@ static t_memory_stick_info* buscar_stick(uint32_t dir_global){
     while(bytes_leidos < tamanio) {
         uint32_t dir_actual = dir_global + bytes_leidos;
         t_memory_stick_info* stick = buscar_stick(dir_actual);
-
+        if(stick == NULL){
+            log_error(logger, "## Direccion fisica %d no pertenece a ningun stick", dir_actual);
+            pthread_mutex_unlock(&m_sticks);
+            return;
+        }
         uint32_t dir_local = dir_actual - stick->base_global;
         uint32_t espacio_en_stick = stick->tamanio - dir_local;
         uint32_t cuanto_leer = tamanio - bytes_leidos;
@@ -208,7 +212,11 @@ static t_memory_stick_info* buscar_stick(uint32_t dir_global){
     while(bytes_escritos < tamanio) {
         uint32_t dir_actual = dir_global + bytes_escritos;
         t_memory_stick_info* stick = buscar_stick(dir_actual);
-
+        if(stick == NULL) {
+    log_error(logger, "## Dirección física %d no pertenece a ningún stick!", dir_actual);
+    pthread_mutex_unlock(&m_sticks);
+    return;
+}
         uint32_t dir_local = dir_actual - stick->base_global;
         uint32_t espacio_en_stick = stick->tamanio - dir_local;
         uint32_t cuanto_escribir = tamanio - bytes_escritos;

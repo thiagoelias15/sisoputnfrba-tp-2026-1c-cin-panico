@@ -36,6 +36,7 @@ void* atender_cliente(void* arg) {
             // Registrar el stick
             t_memory_stick_info* stick = malloc(sizeof(t_memory_stick_info));
             int fd_stick_rw = crear_conexion(ip_stick, puerto_stick);
+            log_info(logger, "DEBUG: crear_conexion al stick devolvio fd = %d", fd_stick_rw);
             stick->fd_socket = fd_stick_rw;
             stick->ip_escucha = ip_stick;
             stick->puerto_escucha = puerto_stick;
