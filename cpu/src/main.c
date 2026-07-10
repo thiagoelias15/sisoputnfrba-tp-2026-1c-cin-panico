@@ -6,7 +6,24 @@
 #include <sys/socket.h>
 t_log* logger;
 int cpu_corriendo = 1;
+int tam_max_segmento = 0;
+t_list* sticks_cpu; // lista de sticks a las que estamos conectados
 
+//funcion para conectarse a un stick y guardarlo en la lista
+void conectar_a_stick(char* ip, char* puerto, uint32_t base_global, uint32_t tamanio) {
+    
+    int fd = crear_conexion(ip, puerto);
+    if(fd != -1) {
+        t_stick_cpu* stick = malloc(sizeof(t_stick_cpu));
+        stick->fd_socket = fd;
+        stick->base_global = base_global;
+        stick->tamanio = tamanio;
+        list_add(sticks_cpu, stick);
+        log_info(logger, "Conectado a Memory Stick en %s:%s (base: %d, tam: %d)", ip, puerto, base_global, tamanio);
+    } else {
+        log_error(logger, "No pude conectarme al Memory Stick en %s:%s", ip, puerto);
+    }
+}
 
 int main(int argc, char* argv[]) { 
     // La variable "argc" almacena la cantidad de palabras en la terminal, mientras que "argv[numero]" almacena la palabra en dicha posición.
@@ -26,6 +43,30 @@ int main(int argc, char* argv[]) {
     if(fd_memoria != -1) {
         enviar_mensaje(cpu_config.id_modulo, MENSAJE, fd_memoria);
         log_info(logger, "Handshake enviado con ID: %s", cpu_config.id_modulo);
+        //recibie el tamaño maximo de segmento de la memoria
+        recv(fd_memoria, &tam_max_segmento, sizeof(int),MSG_WAITALL);
+        log_info(logger, "Tamaño máximo de segmento recibido: %d", tam_max_segmento);
+       // recibimos los sticks que ya existen y nos conectamos a cada uno
+        int cant_sticks;
+        recv(fd_memoria, &cant_sticks, sizeof(int), MSG_WAITALL);
+        for(int i = 0; i < cant_sticks; i++) {
+            int len_ip;
+            recv(fd_memoria,&len_ip, sizeof(int), MSG_WAITALL);
+            char* ip = malloc(len_ip);
+            recv(fd_memoria, ip, len_ip, MSG_WAITALL);
+                        
+            int len_puerto;
+            recv(fd_memoria, &len_puerto, sizeof(int), MSG_WAITALL);
+            char* puerto = malloc(len_puerto);
+            recv(fd_memoria, puerto, len_puerto, MSG_WAITALL);
+            
+            uint32_t base, tam;
+            recv(fd_memoria, &base, sizeof(uint32_t), MSG_WAITALL);
+            recv(fd_memoria, &tam, sizeof(uint32_t), MSG_WAITALL);
+            conectar_a_stick(ip,puerto, base, tam);
+            free(ip);
+            free(puerto);
+        }
     }
 
     int fd_scheduler = crear_conexion(cpu_config.ip_sched, cpu_config.puerto_sched);
@@ -34,27 +75,11 @@ int main(int argc, char* argv[]) {
         log_info(logger, "Handshake enviado con ID: %s", cpu_config.id_modulo);
     }
     
-    // si las conexiones a Memoria y Scheduler fueron exitosas, inicia a andar el CPU
+    // si las conexiones a Memoria y Scheduler fueron exitosas, inicia el CPU
     if(fd_memoria != -1 && fd_scheduler != -1) {
         log_info(logger, "CPU conectada a todos los modulos correctamente");
-        /*
-        log_info(logger, "Enviando saludo a la Memory Stick a traves de la Memoria...");
-        enviar_mensaje("¡Hola Stick! Soy la CPU mandando un saludo.", HANDSHAKE_CPU_A_MS, fd_memoria);
-
-        // Esperamos la respuesta del Memory Stick, el cual llega a través de la memoria.
-        int cod_op = recibir_operacion(fd_memoria);
-        
-        if(cod_op == HANDSHAKE_CPU_A_MS) {
-            char* respuesta_ms = recibir_mensaje(fd_memoria);
-            log_info(logger, "La Stick me respondio correctamente: %s", respuesta_ms);
-            free(respuesta_ms);
-        } else {
-            log_error(logger, "Fallo el handshake con la Stick. Codigo recibido: %d", cod_op);
-        }
-    */
     }
-
-    // bucle principal( escucha al scheduler)
+// bucle principal( escucha al scheduler)
     while(cpu_corriendo) {
 
         // se bloquea la cpu esperando a que el scheduler mande una orden
@@ -62,6 +87,26 @@ int main(int argc, char* argv[]) {
 
         if(cod_op_sched == -1) { // si el socket da -1 murio/desconecto el scheduler
             break;
+        }
+          //si KM nos avisa de un stick nuevo, nos conectamos
+        if(cod_op_sched == NUEVO_STICK) {
+            int len_ip;
+            recv(fd_scheduler,&len_ip, sizeof(int), MSG_WAITALL);
+            char* ip = malloc(len_ip);
+            recv(fd_scheduler, ip, len_ip, MSG_WAITALL);
+
+            int len_puerto;
+            recv(fd_scheduler, &len_puerto, sizeof(int), MSG_WAITALL);
+            char* puerto = malloc(len_puerto);
+            recv(fd_scheduler, puerto, len_puerto, MSG_WAITALL);
+            
+            uint32_t base, tam;
+            recv(fd_scheduler, &base, sizeof(uint32_t), MSG_WAITALL);
+            recv(fd_scheduler, &tam, sizeof(uint32_t), MSG_WAITALL);
+            conectar_a_stick(ip,puerto, base, tam);
+            free(ip);
+            free(puerto);
+            continue;
         }
 
     if(cod_op_sched == CONTEXTO_PCB) {
@@ -133,6 +178,7 @@ int main(int argc, char* argv[]) {
             }
                 
             // Liberamos el PCB cuando ya lo devolvimos y terminamos de trabajar con él
+            list_destroy_and_destroy_elements(pcb_actual->tabla_segmentos, free);
             free(pcb_actual);
         }
     }

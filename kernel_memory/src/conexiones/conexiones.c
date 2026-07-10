@@ -14,13 +14,118 @@ void* atender_cliente(void* arg) {
 
         char* id_modulo = recibir_mensaje(fd_cliente);
         log_info(logger, "Se conecto el modulo: %s", id_modulo);
-        if (strcmp(id_modulo, "MEMORY_STICK") == 0) { // O como sea que se llame tu ID
-        int tamaño_ms;
-        recv(fd_cliente, &tamaño_ms, sizeof(int), MSG_WAITALL);
-        log_info(logger, "Recibí tamaño de MS: %d", tamaño_ms);
+     // se conecta la Stick
+        if (strcmp(id_modulo, "MEMORY_STICK") == 0) {
+            int tamaño_ms;
+            recv(fd_cliente, &tamaño_ms, sizeof(int), MSG_WAITALL);
+            
+            //recibir ip del stick
+            int len_ip;
+            recv(fd_cliente, &len_ip, sizeof(int), MSG_WAITALL);
+            char* ip_stick = malloc(len_ip);
+            recv(fd_cliente, ip_stick, len_ip, MSG_WAITALL);
+            //recibimos el puerto donde el stick escucha CPUs
+            int len_puerto;
+            recv(fd_cliente, &len_puerto, sizeof(int), MSG_WAITALL);
+            char* puerto_stick = malloc(len_puerto);
+            recv(fd_cliente, puerto_stick, len_puerto, MSG_WAITALL);
+            log_info(logger, "## Memory Stick de %d bytes Conectada (puerto CPUs: %s)", tamaño_ms, puerto_stick);
+
+            // Registrar el stick
+            t_memory_stick_info* stick = malloc(sizeof(t_memory_stick_info));
+            stick->fd_socket = fd_cliente;
+            stick->ip_escucha = ip_stick;
+            stick->puerto_escucha = puerto_stick;
+            stick->tamanio = tamaño_ms;
+            pthread_mutex_lock(&m_sticks);
+            stick->base_global = memoria_total;
+            memoria_total += tamaño_ms;
+            list_add(lista_sticks, stick);
+            // Crear/actualizar el hueco libre en la tabla de segmentos
+            pthread_mutex_lock(&m_memoria);
+            // Buscamos si ya hay un hueco libre al final para extenderlo
+            int hueco_extendido = 0;
+            if(list_size(tabla_segmentos_global) > 0) {
+                t_segmento_memoria* ultimo = list_get(tabla_segmentos_global, 
+                    list_size(tabla_segmentos_global) - 1);Stick
+                if(ultimo->ocupado == 0) {
+                    ultimo->tamanio += tamaño_ms;
+                    hueco_extendido = 1;
+                }
+            }
+            if(!hueco_extendido) {
+                t_segmento_memoria* nuevo_hueco = malloc(sizeof(t_segmento_memoria));
+                nuevo_hueco->id = list_size(tabla_segmentos_global);
+                nuevo_hueco->pid = -1;
+                nuevo_hueco->base = stick->base_global;
+                nuevo_hueco->tamanio = tamaño_ms;
+                nuevo_hueco->ocupado = 0;
+                list_add(tabla_segmentos_global, nuevo_hueco);
+            }
+            pthread_mutex_unlock(&m_memoria);
+
+            // Avisarle a las CPUs conectadas que hay un stick nuevo
+              pthread_mutex_lock(&m_cpus);
+            for(int i = 0; i < list_size(lista_cpus_conectadas); i++) {
+                int* fd_cpu = list_get(lista_cpus_conectadas, i);
+                op_code op = NUEVO_STICK;
+                send(*fd_cpu, &op, sizeof(op_code), 0);
+                //mandamos ip
+                int lip = strlen(stick ->ip_escucha) + 1;
+                send(*fd_cpu, &lip, sizeof(int), 0);
+                send(*fd_cpu, stick->ip_escucha, lip, 0);
+                //mandamos puerto
+                int lp = strlen(stick->puerto_escucha) + 1;
+                send(*fd_cpu, &lp, sizeof(int), 0);
+                send(*fd_cpu, stick->puerto_escucha, lp, 0);
+                //mandamos base y tamaño
+                send(*fd_cpu, &stick->base_global, sizeof(uint32_t), 0);
+                send(*fd_cpu, &stick->tamanio, sizeof(uint32_t), 0);
+            }
+            pthread_mutex_unlock(&m_cpus);
+
+            free(id_modulo);
+            // El stick no manda mas nada espontaneamente, KM le habla cuando necesita
+            // NO cerramos fd_cliente porque lo guardamos en stick->fd_socket
+            return NULL;
         }
+
+        //  CPU se conecta
+        if (strcmp(id_modulo, "CPU") == 0) {
+            // Guardamos su fd para avisarle de sticks futuros
+            int* fd_guardado = malloc(sizeof(int));
+            *fd_guardado = fd_cliente;
+            pthread_mutex_lock(&m_cpus);
+            list_add(lista_cpus_conectadas, fd_guardado);
+            pthread_mutex_unlock(&m_cpus);
+
+            // Le mandamos el SEGMENT_MAX_SIZE para que la MMU funcione bien
+            send(fd_cliente, &memoria_config.segment_max_size, sizeof(int), 0);
+
+            // Le mandamos los sticks que ya existen para que se conecte
+            pthread_mutex_lock(&m_sticks);
+            int cant_sticks = list_size(lista_sticks);
+            send(fd_cliente, &cant_sticks, sizeof(int), 0);
+            for(int i = 0; i < cant_sticks; i++) {
+                t_memory_stick_info* s = list_get(lista_sticks, i);
+                //IP
+                int lip = strlen(s->ip_escucha) + 1;
+                send(fd_cliente, &lip, sizeof(int), 0);
+                send(fd_cliente, s->ip_escucha, lip, 0);
+                //PUERTO
+                int lp = strlen(s->puerto_escucha) + 1;
+                send(fd_cliente, &lp, sizeof(int), 0);
+                send(fd_cliente, s->puerto_escucha, lp, 0);
+                //BASE Y TAMAÑO
+                send(fd_cliente, &s->base_global, sizeof(uint32_t), 0);
+                send(fd_cliente, &s->tamanio, sizeof(uint32_t), 0);
+            }
+            pthread_mutex_unlock(&m_sticks);
+        }
+
         free(id_modulo);
     }
+
     //Bucle infinito para escuchar a cliente
     int conectado = 1;
 
@@ -47,15 +152,9 @@ void* atender_cliente(void* arg) {
             case ESCRIBIR_MEMORIA:  
                 atender_escritura_memoria(fd_cliente);
                 break;
-            case HANDSHAKE_CPU_A_MS:
-                log_info(logger, "Ruteando saludo de CPU a MS...");
-                enviar_operacion(HANDSHAKE_CPU_A_MS, fd_cliente);
-                enviar_mensaje("Hola CPU, soy la Stick respondiendo desde la Memoria", HANDSHAKE_CPU_A_MS, fd_cliente);
-                break;
             case SYSCALL_MEM_ALLOC:
                 atender_mem_alloc(fd_cliente);
                 break;
-
             case SYSCALL_MEM_FREE:
                 atender_mem_free(fd_cliente);
                 break;

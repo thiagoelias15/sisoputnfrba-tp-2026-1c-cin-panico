@@ -38,6 +38,14 @@ int main(int argc, char* argv[]) {
     if(fd_memoria != -1) {
         enviar_mensaje(ms_config.id_modulo, MENSAJE, fd_memoria);
         send(fd_memoria, &tamanio_memoria, sizeof(int), 0);
+        
+        int len_ip = strlen(ms_config.ip_escucha) + 1;
+        send(fd_memoria, &len_ip, sizeof(int), 0);
+        send(fd_memoria, ms_config.ip_escucha, len_ip, 0);
+        //le manda el puerto escucha a KM para que se la pase a CPU
+        int len_puerto = strlen(ms_config.puerto_escucha) + 1;
+        send(fd_memoria, &len_puerto, sizeof(int), 0);
+        send(fd_memoria, ms_config.puerto_escucha, len_puerto, 0);
         log_info(logger, "Memory Stick conectado a Kernel Memory");
     } else {
         log_error(logger, "No se pudo conectar a memoria");
@@ -48,20 +56,20 @@ int main(int argc, char* argv[]) {
     }
         // Servidor para las CPUs
         int fd_escucha = iniciar_servidor(ms_config.puerto_escucha);
-        log_info(logger, "Memory Stick listo. Escuchando peticiones de lectura/escritura de CPUs");
+        log_info(logger, "Memory Stick listo. Escuchando peticiones de lectura/escritura de CPUs", ms_config.puerto_escucha);
         
-        while(ms_corriendo) {
-            int* socket_cpu = malloc(sizeof(int));
-            *socket_cpu  = esperar_cliente(fd_escucha);
-        
-            if(*socket_cpu != -1) {
-              pthread_t hilo_cpu;
-              pthread_create(&hilo_cpu, NULL, atender_cpu, socket_cpu);
-              pthread_detach(hilo_cpu);
-            } else {
-                free(socket_cpu);
-            }
+           while(ms_corriendo) {
+        int* socket_cliente = malloc(sizeof(int));
+        *socket_cliente = esperar_cliente(fd_escucha);
+    
+        if(*socket_cliente != -1) {
+          pthread_t hilo;
+          pthread_create(&hilo, NULL, atender_cpu, socket_cliente);
+          pthread_detach(hilo);
+        } else {
+            free(socket_cliente);
         }
+    }
     
     // ------------------------------ LIMPIEZA DE LA MEMORIA ------------------------------ //
     free(espacio_memoria);

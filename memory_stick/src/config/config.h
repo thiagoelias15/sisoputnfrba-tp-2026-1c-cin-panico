@@ -8,6 +8,7 @@ typedef struct {
     char* ip_memoria;
     char* puerto_memoria;
     char* puerto_escucha;
+    char* ip_escucha;
     int memory_delay;
     char* id_modulo;
     t_config* config_base;

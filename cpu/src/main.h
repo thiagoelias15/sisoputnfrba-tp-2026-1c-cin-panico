@@ -11,6 +11,14 @@
 extern t_log* logger;
 extern int cpu_corriendo;
 extern int tam_max_segmento; // esto es para la MMU(cuando cpu lee stdin y stdout recibe direccion logica y se debe hacer una cuenta matematica para mandarsela al scheduler)
+// estructura para los sticks a los que la CPU se conecta
+typedef struct {
+    int fd_socket;
+    uint32_t base_global;
+    uint32_t tamanio;
+} t_stick_cpu;
+
+extern t_list* sticks_cpu;
 
 
 #endif

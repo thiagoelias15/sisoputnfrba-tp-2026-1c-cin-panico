@@ -8,8 +8,8 @@
 
 typedef struct {
     int fd_socket;
-    char* ip;
-    char* puerto;
+    char* ip_escucha;
+    char* puerto_escucha;
     uint32_t base_global;
     uint32_t tamanio;
     }t_memory_stick_info;
