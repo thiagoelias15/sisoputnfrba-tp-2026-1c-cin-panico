@@ -32,6 +32,7 @@ typedef struct {
 void inicializar_memoria();
 // Algoritmo de búsqueda interna (Best Fit)
 t_segmento_memoria* buscar_hueco_best_fit(uint32_t tamanio_necesario);
+t_segmento_memoria* buscar_hueco_worst_fit(uint32_t tamanio_necesario);
 
 // Función principal para asignar espacio a un proceso
 int asignar_memoria(int pid, uint32_t tamanio);

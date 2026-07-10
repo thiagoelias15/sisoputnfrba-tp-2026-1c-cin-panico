@@ -1,5 +1,6 @@
 #include "memoria_administrador.h"
 #include "../main.h"
+#include "../config/config.h"
 
 t_list* tabla_segmentos_global;
 pthread_mutex_t m_memoria;
@@ -40,17 +41,29 @@ t_segmento_memoria* buscar_hueco_best_fit(uint32_t tamanio_necesario){
     return mejor_hueco;
 }
 
+t_segmento_memoria* buscar_hueco_worst_fit(uint32_t tamanio_necesario){
+    t_segmento_memoria* peor_hueco = NULL;
+    for(int i= 0; i < list_size(tabla_segmentos_global); i++){
+        t_segmento_memoria* seg = list_get(tabla_segmentos_global, i);
+        if(seg->ocuapdo == 0 && seg->tamanio >= tamanio_necesario){
+            if(peor_hueco == NULL || seg->tamanio > peor_hueco->tamanio){
+                peor_hueco = seg;
+            }
+        }
+    }
+    return peor_hueco;
+}
 // asignar memoria: llama a best fit y "parte" el hueco encontrado, 1. encuenta el hueco,2.si es mas grande que el pedido, crea un nuevo segmento de "resto"
 // 3. actualiza los punteros y marcas de ocupado
 
 int asignar_memoria(int pid, uint32_t tamanio) {
     pthread_mutex_lock(&m_memoria); // bloqueamos el acceso para que nadie mas la toque la tabla
-    t_segmento_memoria* hueco = buscar_hueco_best_fit(tamanio);
-
-    if(hueco == NULL) {
-        pthread_mutex_unlock(&m_memoria);
-        return -1; // no hay espacio
-    }
+   t_segmento_memoria* hueco = NULL;
+   if(strcmp(memoria_config.allocation_strategy, "BEST")== 0){
+    hueco = buscar_hueco_best_fit(tamanio);
+   }else{
+    hueco = buscar_hueco_worst_fit(tamanio);
+   }
 
     // si sobra espacio, creamos un nuevo segmento con el "resto"
     if(hueco -> tamanio > tamanio) {
