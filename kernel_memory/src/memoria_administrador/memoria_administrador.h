@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <commons/collections/list.h>
 #include <commons/collections/dictionary.h>
+#include <pthread.h>
 
 typedef struct {
     int fd_socket;
@@ -38,8 +39,10 @@ t_segmento_memoria* buscar_hueco_worst_fit(uint32_t tamanio_necesario);
 int asignar_memoria(int pid, uint32_t tamanio);
 void liberar_memoria(int pid, int id_segmento);
 void compactar_memoria();
-void_leer_de_sticks(uint32_t dir_global, void* buffer, uint32_t tamanio);
+void leer_de_sticks(uint32_t dir_global, void* buffer, uint32_t tamanio);
 void escribir_en_sticks(uint32_t dir_global, void* buffer, uint32_t tamanio);
+void liberar_todos_segmentos_pid(int pid);
+extern int fd_scheduler_global;
 #endif
 
 

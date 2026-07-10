@@ -36,6 +36,7 @@ int main(int argc, char* argv[]) {
     
     cargar_configuracion_cpu(argv[1]);
     logger = log_create("cpu.log", argv[2], 1, LOG_LEVEL_INFO);
+    sticks_cpu = list_create();
 
     // ------------------------------ CONEXIONES ------------------------------ //
     

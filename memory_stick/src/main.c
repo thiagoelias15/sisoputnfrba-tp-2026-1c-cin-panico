@@ -56,7 +56,7 @@ int main(int argc, char* argv[]) {
     }
         // Servidor para las CPUs
         int fd_escucha = iniciar_servidor(ms_config.puerto_escucha);
-        log_info(logger, "Memory Stick listo. Escuchando peticiones de lectura/escritura de CPUs", ms_config.puerto_escucha);
+        log_info(logger, "Memory Stick listo. Escuchando en puerto %s", ms_config.puerto_escucha);
         
            while(ms_corriendo) {
         int* socket_cliente = malloc(sizeof(int));

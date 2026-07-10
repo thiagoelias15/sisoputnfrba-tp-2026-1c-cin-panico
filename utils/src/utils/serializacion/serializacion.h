@@ -52,7 +52,7 @@ typedef enum {
     NUEVO_STICK=23,
     MEMORIA_CORRUPTA=24,
     PEDIDO_COMPACTACION = 25,
-    COMPACTACION:OK= 26
+    COMPACTACION_OK= 26
 } op_code;
 
 // Funciones para enviar y recibir mensajes y PCBs

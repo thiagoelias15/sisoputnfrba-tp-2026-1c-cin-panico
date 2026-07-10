@@ -1,6 +1,7 @@
 #include "conexiones.h"
 #include "../core/memoria_core.h"
 #include "../memoria_administrador/memoria_administrador.h"
+#include "../config/config.h"
 extern t_list* tabla_segmentos_global;
 extern pthread_mutex_t m_memoria;
 int fd_scheduler_global = -1;
@@ -34,7 +35,8 @@ void* atender_cliente(void* arg) {
 
             // Registrar el stick
             t_memory_stick_info* stick = malloc(sizeof(t_memory_stick_info));
-            stick->fd_socket = fd_cliente;
+            int fd_stick_rw = crear_conexion(ip_stick, puerto_stick);
+            stick->fd_socket = fd_stick_rw;
             stick->ip_escucha = ip_stick;
             stick->puerto_escucha = puerto_stick;
             stick->tamanio = tamaño_ms;
@@ -48,7 +50,7 @@ void* atender_cliente(void* arg) {
             int hueco_extendido = 0;
             if(list_size(tabla_segmentos_global) > 0) {
                 t_segmento_memoria* ultimo = list_get(tabla_segmentos_global, 
-                    list_size(tabla_segmentos_global) - 1);Stick
+                    list_size(tabla_segmentos_global) - 1);
                 if(ultimo->ocupado == 0) {
                     ultimo->tamanio += tamaño_ms;
                     hueco_extendido = 1;
@@ -84,6 +86,7 @@ void* atender_cliente(void* arg) {
                 send(*fd_cpu, &stick->tamanio, sizeof(uint32_t), 0);
             }
             pthread_mutex_unlock(&m_cpus);
+            pthread_mutex_unlock(&m_sticks);
 
             free(id_modulo);
             // El stick no manda mas nada espontaneamente, KM le habla cuando necesita
@@ -124,7 +127,7 @@ void* atender_cliente(void* arg) {
             pthread_mutex_unlock(&m_sticks);
         }
         if(strcmp(id_modulo, "SCHEDULER")== 0){
-            log_info(logger, "## Kernel Scheduler Conectado - FD del socket: &d", fd_cliente);
+            log_info(logger, "## Kernel Scheduler Conectado - FD del socket: %d", fd_cliente);
             fd_scheduler_global = fd_cliente;
         }
 
@@ -166,8 +169,8 @@ void* atender_cliente(void* arg) {
             case SYSCALL_EXIT: {
                 int pid;
                 recv(fd_cliente, &pid, sizeof(int), MSG_WAITALL);
-                log_info(logger, "## PID: &d - Liberando todos los segmentos por EXIT", pid);
-                liberando_todos_los_segmentos(pid);
+                log_info(logger, "## PID: %d - Liberando todos los segmentos por EXIT", pid);
+                liberar_todos_segmentos_pid(pid);
                 int ok = 1;
                 send(fd_cliente, &ok, sizeof(int), 0);
                 break;
@@ -197,25 +200,36 @@ void atender_mem_alloc(int fd_cliente) {
 
     log_info(logger, "## PID: %d - Crear Segmento - ID: %d - Tamaño: %d", pid, id_segmento, tam_segmento);
 
-    // 1. Usamos función asignar_memoria (que ya hace el Best Fit)
     int id_asignado = asignar_memoria(pid, tam_segmento);
-    if(id_asignado != -1){
-        //le avisamos al scheduler que se necesita compactar
+    int hubo_compactacion = 0;
+
+    if(id_asignado == -1) {
+        // Le avisamos al scheduler: -1 significa "necesito compactar"
         int necesita_compactar = -1;
         send(fd_cliente, &necesita_compactar, sizeof(int), 0);
-        //esperamos que el scheduler desaloje las CPUs y nos confirme
+
         int confirmacion;
         recv(fd_cliente, &confirmacion, sizeof(int), MSG_WAITALL);
-        log_info(logger,"## Inicio de compactacion");
+
+        log_info(logger, "## Inicio de compactación");
         compactar_memoria();
-        log_info(logger,"## Fin de compactacion");
-        //le avisamos que terminamos de compactar
+        log_info(logger, "## Fin de compactación");
+
         int fin_compactacion = 1;
         send(fd_cliente, &fin_compactacion, sizeof(int), 0);
-        //reintentamos asignar memoria
+
         id_asignado = asignar_memoria(pid, tam_segmento);
+        hubo_compactacion = 1;
     }
-     uint32_t direccion_base = 999999;
+
+    if(!hubo_compactacion) {
+        // Si NO compactamos, mandamos un 0 como primer respuesta
+        // (el scheduler siempre espera este int primero)
+        int ok = 0;
+        send(fd_cliente, &ok, sizeof(int), 0);
+    }
+
+    uint32_t direccion_base = 999999;
 
     if(id_asignado != -1) {
         pthread_mutex_lock(&m_memoria);
@@ -233,10 +247,9 @@ void atender_mem_alloc(int fd_cliente) {
         log_error(logger, "Out of Memory incluso después de compactar.");
     }
 
-    // Mandamos la dirección base real (si no hubo compactación, es la primera respuesta;
-    // si hubo compactación, es la tercera)
     send(fd_cliente, &direccion_base, sizeof(uint32_t), 0);
 }
+
 void atender_mem_free(int fd_cliente) {
     uint32_t pid;
     int id_segmento;

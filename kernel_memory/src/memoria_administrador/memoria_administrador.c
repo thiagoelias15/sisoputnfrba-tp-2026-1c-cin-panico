@@ -1,10 +1,10 @@
 #include "memoria_administrador.h"
 #include "../main.h"
 #include "../config/config.h"
+static t_memory_stick_info* buscar_stick(uint32_t dir_global);
 
 t_list* tabla_segmentos_global;
 pthread_mutex_t m_memoria;
-void* espacio_memoria_real;
 t_dictionary* mapeo_archivos_procesos;
 t_list* lista_sticks;
 uint32_t memoria_total = 0;
@@ -45,7 +45,7 @@ t_segmento_memoria* buscar_hueco_worst_fit(uint32_t tamanio_necesario){
     t_segmento_memoria* peor_hueco = NULL;
     for(int i= 0; i < list_size(tabla_segmentos_global); i++){
         t_segmento_memoria* seg = list_get(tabla_segmentos_global, i);
-        if(seg->ocuapdo == 0 && seg->tamanio >= tamanio_necesario){
+        if(seg->ocupado == 0 && seg->tamanio >= tamanio_necesario){
             if(peor_hueco == NULL || seg->tamanio > peor_hueco->tamanio){
                 peor_hueco = seg;
             }
@@ -66,6 +66,10 @@ int asignar_memoria(int pid, uint32_t tamanio) {
    }
 
     // si sobra espacio, creamos un nuevo segmento con el "resto"
+    if(hueco == NULL){
+        pthread_mutex_unlock(&m_memoria);
+        return -1;
+    }
     if(hueco -> tamanio > tamanio) {
         t_segmento_memoria* resto = malloc(sizeof(t_segmento_memoria));
         resto -> id = list_size(tabla_segmentos_global); // ID nuevo
@@ -143,8 +147,17 @@ void compactar_memoria() {
     gran_hueco -> tamanio = memoria_total - direccion_actual;
     gran_hueco -> ocupado = 0;
     list_add(tabla_segmentos_global, gran_hueco);
-    log_info(logger, "## Compactacion finalizada."):
+    log_info(logger, "## Compactacion finalizada.");
     pthread_mutex_unlock(&m_memoria);
+}
+static t_memory_stick_info* buscar_stick(uint32_t dir_global){
+     for(int i = 0; i < list_size(lista_sticks); i++) {
+        t_memory_stick_info* s = list_get(lista_sticks, i);
+        if(dir_global >= s->base_global && dir_global < s->base_global + s->tamanio) {
+            return s;
+        }
+    }
+    return NULL;
 }
 
 //funcion que busca a que stick pertenece una direccion global y le pidea que lea
