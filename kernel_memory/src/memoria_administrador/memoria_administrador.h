@@ -14,7 +14,7 @@ typedef struct {
     uint32_t base_global;
     uint32_t tamanio;
     }t_memory_stick_info;
-typedf struct {
+typedef struct {
     int id_segmento;
     uint32_t tamanio;
     int bloque_swap_inicio; // en que bloque de SWAP arranca

@@ -1,44 +1,24 @@
 #!/bin/bash
-# ======= PRUEBA BASE =======
-# Cambiar estas IPs para el deploy en la facu
-IP_MEMORIA="127.0.0.1"
-IP_SCHEDULER="127.0.0.1"
-IP_SWAP="127.0.0.1"
-IP_STICKS="127.0.0.1"
+BASE=~/tp-2026-1c-cin-panico
 
 ./matar.sh
-
-echo "=== Iniciando Prueba Base ==="
-
-cd swap && ./bin/swap swap.config &
-cd ..
 sleep 1
+echo "=== Iniciando Prueba Base (PLANI_PRE_0) ==="
 
-cd kernel_memory && ./bin/kernel_memory memoria_base.config &
-cd ..
+xterm -T "SWAP" -e bash -c "$BASE/swap/bin/swap $BASE/swap/swap.config; echo 'SWAP terminó'; read" &
 sleep 1
-
-cd memory_stick && ./bin/memory_stick ms1.config 256 &
-cd ..
+xterm -T "KERNEL MEMORY" -e bash -c "$BASE/kernel_memory/bin/kernel_memory $BASE/kernel_memory/memoria_base.config; echo 'KM terminó'; read" &
+sleep 1
+xterm -T "MEMORY STICK 1" -e bash -c "$BASE/memory_stick/bin/memory_stick $BASE/memory_stick/ms1.config 256; echo 'MS1 terminó'; read" &
 sleep 2
-
-cd io && ./bin/io io_sleep.config SLEEP &
-cd ..
-sleep 1
-cd io && ./bin/io io_stdin.config STDIN &
-cd ..
-sleep 1
-cd io && ./bin/io io_stdout.config STDOUT &
-cd ..
-sleep 1
-
-cd kernel_scheduler && ./bin/kernel_scheduler sched_base.config PLANI_PRE_0.prc &
-cd ..
+xterm -T "SCHEDULER" -e bash -c "$BASE/kernel_scheduler/bin/kernel_scheduler $BASE/kernel_scheduler/sched_base.config PLANI_PRE_0.prc; echo 'SCHED terminó'; read" &
 sleep 2
+xterm -T "IO SLEEP" -e bash -c "$BASE/io/bin/io $BASE/io/sleep.config SLEEP; echo 'SLEEP terminó'; read" &
+sleep 1
+xterm -T "IO STDIN" -e bash -c "$BASE/io/bin/io $BASE/io/stdin.config STDIN; echo 'STDIN terminó'; read" &
+sleep 1
+xterm -T "IO STDOUT" -e bash -c "$BASE/io/bin/io $BASE/io/stdout.config STDOUT; echo 'STDOUT terminó'; read" &
+sleep 1
+xterm -T "CPU 1" -e bash -c "$BASE/cpu/bin/cpu $BASE/cpu/cpu.config 1; echo 'CPU terminó'; read" &
 
-cd cpu && ./bin/cpu cpu.config 1 &
-cd ..
-
-echo "=== Prueba Base iniciada (1 stick 256 bytes) ==="
-echo "Esperá a que terminen los procesos."
-echo "Después corré de nuevo con MEMORIA_PRE_0.prc"
+echo "=== Todos los módulos iniciados ==="

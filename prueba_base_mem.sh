@@ -3,15 +3,15 @@ BASE=~/tp-2026-1c-cin-panico
 
 ./matar.sh
 sleep 1
-echo "=== Iniciando Prueba PCP ==="
+echo "=== Iniciando Prueba Base (MEMORIA_PRE_0) ==="
 
 xterm -T "SWAP" -e bash -c "$BASE/swap/bin/swap $BASE/swap/swap.config; echo 'SWAP terminó'; read" &
 sleep 1
-xterm -T "KERNEL MEMORY" -e bash -c "$BASE/kernel_memory/bin/kernel_memory $BASE/kernel_memory/memoria_pcp.config; echo 'KM terminó'; read" &
+xterm -T "KERNEL MEMORY" -e bash -c "$BASE/kernel_memory/bin/kernel_memory $BASE/kernel_memory/memoria_base.config; echo 'KM terminó'; read" &
 sleep 1
 xterm -T "MEMORY STICK 1" -e bash -c "$BASE/memory_stick/bin/memory_stick $BASE/memory_stick/ms1.config 256; echo 'MS1 terminó'; read" &
 sleep 2
-xterm -T "SCHEDULER" -e bash -c "$BASE/kernel_scheduler/bin/kernel_scheduler $BASE/kernel_scheduler/sched_pcp.config PCP.prc; echo 'SCHED terminó'; read" &
+xterm -T "SCHEDULER" -e bash -c "$BASE/kernel_scheduler/bin/kernel_scheduler $BASE/kernel_scheduler/sched_base.config MEMORIA_PRE_0.prc; echo 'SCHED terminó'; read" &
 sleep 2
 xterm -T "IO SLEEP" -e bash -c "$BASE/io/bin/io $BASE/io/sleep.config SLEEP; echo 'SLEEP terminó'; read" &
 sleep 1
