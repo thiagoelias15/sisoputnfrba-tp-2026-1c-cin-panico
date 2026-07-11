@@ -12,6 +12,84 @@ bool comparar_prioridades(void *pcb1, void *pcb2)
     return p1->prioridad < p2->prioridad;
 }
 
+void* timer_suspension(void* arg) {
+    int pid = *(int*)arg;
+    free(arg);
+
+    usleep(kernel_config.suspension_timeout * 1000);
+
+    pthread_mutex_lock(&m_block);
+    t_pcb* encontrado = NULL;
+    int indice = -1;
+    for(int i = 0; i < list_size(cola_block); i++) {
+        t_pcb* pcb = list_get(cola_block, i);
+        if(pcb->pid == pid) {
+            encontrado = pcb;
+            indice = i;
+            break;
+        }
+    }
+
+    if(encontrado != NULL) {
+        list_remove(cola_block, indice);
+        pthread_mutex_unlock(&m_block);
+
+        encontrado->estado = SUSP_BLOCK;
+        log_info(logger, "## (%d) Pasa del estado BLOCK al estado SUSP_BLOCK", pid);
+
+        op_code op = SWAP_ESCRITURA;
+        send(fd_memoria, &op, sizeof(op_code), 0);
+        send(fd_memoria, &pid, sizeof(int), 0);
+        int confirmacion;
+        recv(fd_memoria, &confirmacion, sizeof(int), MSG_WAITALL);
+        log_info(logger, "## (%d) Segmentos movidos a SWAP", pid);
+
+        pthread_mutex_lock(&m_susp);
+        list_add(cola_susp_block, encontrado);
+        pthread_mutex_unlock(&m_susp);
+    } else {
+        pthread_mutex_unlock(&m_block);
+    }
+
+    return NULL;
+}
+void intentar_desuspender() {
+    pthread_mutex_lock(&m_susp);
+
+    list_sort(cola_susp_ready, comparar_prioridades);
+
+    for(int i = 0; i < list_size(cola_susp_ready); i++) {
+        t_pcb* pcb = list_get(cola_susp_ready, i);
+
+        op_code op = SWAP_LECTURA;
+        send(fd_memoria, &op, sizeof(op_code), 0);
+        send(fd_memoria, &(pcb->pid), sizeof(int), 0);
+
+        int resultado;
+        recv(fd_memoria, &resultado, sizeof(int), MSG_WAITALL);
+
+        if(resultado == 1) {
+            list_remove(cola_susp_ready, i);
+            i--;
+
+            pcb->estado = READY;
+            log_info(logger, "## (%d) Pasa del estado SUSP_READY al estado READY", pcb->pid);
+
+            int prio = 0;
+            if(strcmp(kernel_config.algoritmo_planificacion, "CMN") == 0) {
+                prio = pcb->prioridad;
+            }
+
+            pthread_mutex_lock(&m_ready);
+            list_add(colas_ready[prio], pcb);
+            pthread_mutex_unlock(&m_ready);
+
+            sem_post(&sem_procesos_ready);
+        }
+    }
+
+    pthread_mutex_unlock(&m_susp);
+}
 void *atender_cliente(void *arg)
 {
 
@@ -55,6 +133,7 @@ void *atender_cliente(void *arg)
                 log_info(logger, "## (%d) finalizó su ejecución", pcb_upd->pid);
                 list_add(cola_exit, pcb_upd);
                 sem_post(&sem_procesos_ready); // La CPU queda libre
+                intentar_desuspender(); // Intentamos desuspender procesos si es posible
                 break;
             }
 
@@ -75,6 +154,7 @@ void *atender_cliente(void *arg)
 
                 // Liberamos la CPU
                 sem_post(&sem_procesos_ready);
+                intentar_desuspender();
                 break;
             }
 
@@ -109,6 +189,12 @@ void *atender_cliente(void *arg)
                 pthread_mutex_lock(&m_block);
                 list_add(cola_block, pcb_upd);
                 pthread_mutex_unlock(&m_block);
+                // Lanzar timer de suspensión
+                int* pid_timer = malloc(sizeof(int));
+                *pid_timer = pcb_upd->pid;
+                pthread_t hilo_susp;
+                pthread_create(&hilo_susp, NULL, timer_suspension, pid_timer);
+                pthread_detach(hilo_susp);
 
                 if (dictionary_has_key(dic_interfaces, "SLEEP"))
                 {
@@ -166,7 +252,12 @@ void *atender_cliente(void *arg)
                     pthread_mutex_lock(&m_block);
                     list_add(cola_block, pcb_upd);
                     pthread_mutex_unlock(&m_block);
-
+                    // Lanzar timer de suspensión
+                int* pid_timer = malloc(sizeof(int));
+                *pid_timer = pcb_upd->pid;
+                pthread_t hilo_susp;
+                pthread_create(&hilo_susp, NULL, timer_suspension, pid_timer);
+                pthread_detach(hilo_susp);
                     queue_push(mutex_actual->bloqueados, pcb_upd);
 
                     // Herencia de prioridades
@@ -235,7 +326,12 @@ void *atender_cliente(void *arg)
                 pthread_mutex_lock(&m_block);   // Bloquea acceso a cola de bloqueados
                 list_add(cola_block, pcb_upd);  // Agrega el proceso a la cola BLOCK
                 pthread_mutex_unlock(&m_block); // Libera el mutex de la cola
-
+                // Lanzar timer de suspensión
+                int* pid_timer = malloc(sizeof(int));
+                *pid_timer = pcb_upd->pid;
+                pthread_t hilo_susp;
+                pthread_create(&hilo_susp, NULL, timer_suspension, pid_timer);
+                pthread_detach(hilo_susp);
                 if (dictionary_has_key(dic_interfaces, "STDIN"))
                 {
 
@@ -265,7 +361,12 @@ void *atender_cliente(void *arg)
                 pthread_mutex_lock(&m_block);                                                  // Protege la cola de bloqueados
                 list_add(cola_block, pcb_upd);                                                 // Mueve el PCB a estado bloqueado
                 pthread_mutex_unlock(&m_block);                                                // Libera la protección de la cola
-
+                // Lanzar timer de suspensión
+                int* pid_timer = malloc(sizeof(int));
+                *pid_timer = pcb_upd->pid;
+                pthread_t hilo_susp;
+                pthread_create(&hilo_susp, NULL, timer_suspension, pid_timer);
+                pthread_detach(hilo_susp);
                 // 1. EL SCHEDULER LE PIDE LA INFO A MEMORIA
                 op_code op_leer = LEER_MEMORIA;
                 send(fd_memoria, &op_leer, sizeof(op_code), 0);
@@ -367,27 +468,18 @@ void *atender_cliente(void *arg)
                 recv(fd_memoria, &direccion_base, sizeof(uint32_t), MSG_WAITALL);
 
                 // 3. Creamos la estructura del segmento
-                t_segmento *nuevo_segmento = malloc(sizeof(t_segmento));
-                nuevo_segmento->id = id_segmento;
-                nuevo_segmento->tamanio = (uint32_t)tam_segmento;
-                nuevo_segmento->direccion_base = direccion_base;
-
-                // 4. Lo guardamos en la tabla del proceso (¡Para que la MMU lo pueda leer!)
-                list_add(pcb_upd->tabla_segmentos, nuevo_segmento);
-
-                // 5. El proceso vuelve a READY listo para seguir
-                pcb_upd->estado = READY;
-                int prio = 0;
-                if (strcmp(kernel_config.algoritmo_planificacion, "CMN") == 0)
-                {
-                    prio = pcb_upd->prioridad;
+                if(direccion_base == 999999) {
+                    log_error(logger, "## (%d) MEM_ALLOC falló - Out of Memory", pcb_upd->pid);
+                } else {
+                    t_segmento *nuevo_segmento = malloc(sizeof(t_segmento));
+                    nuevo_segmento->id = id_segmento;
+                    nuevo_segmento->tamanio = (uint32_t)tam_segmento;
+                    nuevo_segmento->direccion_base = direccion_base;
+                    list_add(pcb_upd->tabla_segmentos, nuevo_segmento);
                 }
 
-                pthread_mutex_lock(&m_ready);
-                list_add(colas_ready[prio], pcb_upd);
-                pthread_mutex_unlock(&m_ready);
-
-                sem_post(&sem_procesos_ready);
+                // 5. El proceso vuelve a CPU directo
+                 enviar_pcb(pcb_upd, fd_cpu, CONTEXTO_PCB);
                 break;
             }
 
@@ -420,21 +512,12 @@ void *atender_cliente(void *arg)
                     }
                 }
 
-                // 4. El proceso vuelve a READY
-                pcb_upd->estado = READY;
-                int prio = 0;
-                if (strcmp(kernel_config.algoritmo_planificacion, "CMN") == 0)
-                {
-                    prio = pcb_upd->prioridad;
-                }
-
-                pthread_mutex_lock(&m_ready);
-                list_add(colas_ready[prio], pcb_upd);
-                pthread_mutex_unlock(&m_ready);
-
-                sem_post(&sem_procesos_ready);
-                break;
+                // 4. El proceso vuelve a CPU directo
+                 enviar_pcb(pcb_upd, fd_cpu, CONTEXTO_PCB);
+                intentar_desuspender();
+                 break;
             }
+                
 
             default:
 
@@ -466,19 +549,43 @@ void *atender_cliente(void *arg)
                 dictionary_remove(dic_interfaces, id_recibida); // como hubo error borramos esa IO del dicccionario
                 break;
             }
-
-            if (cod_op == MENSAJE)
+if (cod_op == MENSAJE)
             {
-
                 char *resp = recibir_mensaje(socket_cliente);
 
                 if (strcmp(resp, "FIN_IO") == 0)
                 {
-
                     int pid_fin;
                     recv(socket_cliente, &pid_fin, sizeof(int), MSG_WAITALL);
-                    log_info(logger, "## (%d) finalizo IO y paso a READY", pid_fin);
-                    mover_a_ready(pid_fin);
+
+                    int en_block = 0;
+                    pthread_mutex_lock(&m_block);
+                    for(int i = 0; i < list_size(cola_block); i++) {
+                        t_pcb* p = list_get(cola_block, i);
+                        if(p->pid == pid_fin) {
+                            en_block = 1;
+                            break;
+                        }
+                    }
+                    pthread_mutex_unlock(&m_block);
+
+                    if(en_block) {
+                        log_info(logger, "## (%d) finalizo IO y paso a READY", pid_fin);
+                        mover_a_ready(pid_fin);
+                    } else {
+                        pthread_mutex_lock(&m_susp);
+                        for(int i = 0; i < list_size(cola_susp_block); i++) {
+                            t_pcb* p = list_get(cola_susp_block, i);
+                            if(p->pid == pid_fin) {
+                                list_remove(cola_susp_block, i);
+                                p->estado = SUSP_READY;
+                                list_add(cola_susp_ready, p);
+                                log_info(logger, "## (%d) finalizo IO y paso a SUSP_READY", pid_fin);
+                                break;
+                            }
+                        }
+                        pthread_mutex_unlock(&m_susp);
+                    }
                 }
 
                 free(resp);
@@ -509,8 +616,34 @@ void *atender_cliente(void *arg)
                 free(buffer_leido);
 
                 // 3. Despertamos al proceso para que vuelva a la CPU
-                log_info(logger, "## (%d) finalizo IO (STDIN) y paso a READY", pid_fin);
-                mover_a_ready(pid_fin);
+                int en_block_stdin = 0;
+                pthread_mutex_lock(&m_block);
+                for(int i = 0; i < list_size(cola_block); i++) {
+                    t_pcb* p = list_get(cola_block, i);
+                    if(p->pid == pid_fin) {
+                        en_block_stdin = 1;
+                        break;
+                    }
+                }
+                pthread_mutex_unlock(&m_block);
+
+                if(en_block_stdin) {
+                    log_info(logger, "## (%d) finalizo IO (STDIN) y paso a READY", pid_fin);
+                    mover_a_ready(pid_fin);
+                } else {
+                    pthread_mutex_lock(&m_susp);
+                    for(int i = 0; i < list_size(cola_susp_block); i++) {
+                        t_pcb* p = list_get(cola_susp_block, i);
+                        if(p->pid == pid_fin) {
+                            list_remove(cola_susp_block, i);
+                            p->estado = SUSP_READY;
+                            list_add(cola_susp_ready, p);
+                            log_info(logger, "## (%d) finalizo IO (STDIN) y paso a SUSP_READY", pid_fin);
+                            break;
+                        }
+                    }
+                    pthread_mutex_unlock(&m_susp);
+                }
             }
         }
     }

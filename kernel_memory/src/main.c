@@ -30,6 +30,17 @@ int main(int argc, char* argv[]) {
 
     log_info(logger, "Memoria escuchando en puerto %s", memoria_config.puerto);
     
+    // Conectar a SWAP
+    int fd_swap_conn = crear_conexion(memoria_config.ip_swap, memoria_config.puerto_swap);
+    if(fd_swap_conn != -1) {
+        recv(fd_swap_conn, &swap_block_size, sizeof(int), MSG_WAITALL);
+        recv(fd_swap_conn, &swap_file_size, sizeof(int), MSG_WAITALL);
+        fd_swap = fd_swap_conn;
+        log_info(logger, "## Conectado a SWAP - Block size: %d, File size: %d", swap_block_size, swap_file_size);
+    } else {
+        log_warning(logger, "No se pudo conectar a SWAP (suspensión no disponible)");
+    }
+
     // Bucle principal para atender clientes concurrentemente
     while(1) {
         int fd_cliente = esperar_cliente(fd_servidor);

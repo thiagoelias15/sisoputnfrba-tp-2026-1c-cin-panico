@@ -24,6 +24,9 @@ extern int cantidad_colas;
 extern t_list* cola_exec;
 extern t_list* cola_block;
 extern t_list* cola_exit;
+extern t_list* cola_susp_block;
+extern t_list* cola_susp_ready;
+extern pthread_mutex_t m_susp;
 
 extern pthread_mutex_t m_ready, m_new, m_block, m_exit;
 extern sem_t sem_procesos_ready;
@@ -33,9 +36,7 @@ extern t_dictionary* dic_interfaces;
 extern int fd_cpu;
 extern int fd_memoria;
 
-// Asumo que en el config tenés estas variables
-// extern char* algoritmo_planificacion;
-// extern int quantum_rr;
+
 
 extern t_log* logger;
 extern int scheduler_corriendo;

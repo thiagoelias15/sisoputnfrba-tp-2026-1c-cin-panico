@@ -11,6 +11,9 @@ uint32_t memoria_total = 0;
 pthread_mutex_t m_sticks;
 t_list* lista_cpus_conectadas;
 pthread_mutex_t m_cpus;
+int fd_swap = -1;
+int swap_block_size = 0;
+int swap_file_size = 0;
 
 void inicializar_memoria() {
     tabla_segmentos_global = list_create();

@@ -43,6 +43,9 @@ void leer_de_sticks(uint32_t dir_global, void* buffer, uint32_t tamanio);
 void escribir_en_sticks(uint32_t dir_global, void* buffer, uint32_t tamanio);
 void liberar_todos_segmentos_pid(int pid);
 extern int fd_scheduler_global;
+extern int fd_swap;
+extern int swap_block_size;
+extern int swap_fiel_size;
 #endif
 
 

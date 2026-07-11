@@ -13,6 +13,8 @@ typedef struct{
     int instruction_delay;
     int compaction_delay;
     char* scripts_basepath;
+    char* ip_swap;
+    char* puerto_swap;
     t_config* config_base;
 } t_memoria_config;
 

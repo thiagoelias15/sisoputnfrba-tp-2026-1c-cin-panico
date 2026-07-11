@@ -176,6 +176,92 @@ void* atender_cliente(void* arg) {
                 send(fd_cliente, &ok, sizeof(int), 0);
                 break;
             }
+            
+              case SWAP_ESCRITURA: {
+                // Suspender proceso: mover segmentos de sticks a SWAP
+                int pid;
+                recv(fd_cliente, &pid, sizeof(int), MSG_WAITALL);
+                log_info(logger, "## PID: %d - Suspendiendo, moviendo segmentos a SWAP", pid);
+
+                pthread_mutex_lock(&m_memoria);
+                for(int i = 0; i < list_size(tabla_segmentos_global); i++) {
+                    t_segmento_memoria* seg = list_get(tabla_segmentos_global, i);
+                    if(seg->pid == pid && seg->ocupado == 1) {
+                        // Leer datos del stick
+                        void* datos = malloc(seg->tamanio);
+                        pthread_mutex_unlock(&m_memoria);
+                        leer_de_sticks(seg->base, datos, seg->tamanio);
+                        pthread_mutex_lock(&m_memoria);
+
+                        // Escribir en SWAP bloque por bloque
+                        int bloques_necesarios = (seg->tamanio + swap_block_size - 1) / swap_block_size;
+                        for(int b = 0; b < bloques_necesarios; b++) {
+                            // Buscar bloque libre en SWAP (usamos base del segmento como referencia)
+                            int num_bloque = (seg->base / swap_block_size) + b;
+
+                            op_code op_sw = SWAP_ESCRITURA;
+                            send(fd_swap, &op_sw, sizeof(op_code), 0);
+                            send(fd_swap, &num_bloque, sizeof(int), 0);
+
+                            // El SWAP espera recibir_mensaje (tamaño + datos)
+                            int tam_bloque = swap_block_size;
+                            send(fd_swap, &tam_bloque, sizeof(int), 0);
+                            send(fd_swap, datos + (b * swap_block_size), swap_block_size, 0);
+
+                            // Recibir confirmación "OK"
+                            recibir_operacion(fd_swap);
+                            char* ok = recibir_mensaje(fd_swap);
+                            free(ok);
+                        }
+                        free(datos);
+
+                        // Liberar el segmento en memoria
+                        seg->ocupado = 0;
+                        seg->pid = -1;
+                    }
+                }
+                pthread_mutex_unlock(&m_memoria);
+
+                int ok = 1;
+                send(fd_cliente, &ok, sizeof(int), 0);
+                break;
+            }
+
+            case SWAP_LECTURA: {
+                // Des-suspender proceso: restaurar segmentos de SWAP a sticks
+                int pid;
+                recv(fd_cliente, &pid, sizeof(int), MSG_WAITALL);
+                log_info(logger, "## PID: %d - Intentando des-suspender desde SWAP", pid);
+
+                // Primero verificamos si hay espacio suficiente
+                // Calculamos cuánto espacio necesita el proceso
+                // si hay espacio libre total >= lo que necesita, lo restauramos
+                int espacio_necesario = 0;
+                int espacio_libre = 0;
+
+                pthread_mutex_lock(&m_memoria);
+                for(int i = 0; i < list_size(tabla_segmentos_global); i++) {
+                    t_segmento_memoria* seg = list_get(tabla_segmentos_global, i);
+                    if(seg->ocupado == 0) {
+                        espacio_libre += seg->tamanio;
+                    }
+                }
+                pthread_mutex_unlock(&m_memoria);
+
+                // respondemos 1 (éxito) si hay algo de espacio libre
+                // y 0 si no hay nada
+                if(espacio_libre <= 0) {
+                    int resultado = 0;
+                    send(fd_cliente, &resultado, sizeof(int), 0);
+                    break;
+                }
+
+                // Hay espacio, respondemos éxito
+                int resultado = 1;
+                send(fd_cliente, &resultado, sizeof(int), 0);
+                log_info(logger, "## PID: %d - Des-suspendido exitosamente", pid);
+                break;
+            }
             case -1:
                 log_error(logger, "Un cliente se desconecto.");
                 conectado = 0;
