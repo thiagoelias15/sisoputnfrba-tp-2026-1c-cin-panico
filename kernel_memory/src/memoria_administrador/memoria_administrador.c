@@ -14,6 +14,9 @@ pthread_mutex_t m_cpus;
 int fd_swap = -1;
 int swap_block_size = 0;
 int swap_file_size = 0;
+t_dictionary* segmentos_en_swap;
+pthread_mutex_t m_swap;
+int proximo_bloque_swap = 0; // para saber que bloque de swap esta libre
 
 void inicializar_memoria() {
     tabla_segmentos_global = list_create();
@@ -23,6 +26,8 @@ void inicializar_memoria() {
     pthread_mutex_init(&m_sticks,NULL);
     lista_cpus_conectadas = list_create();
     pthread_mutex_init(&m_cpus,NULL);
+    segmentos_en_swap = dictionary_create();
+    pthread_mutex_init(&m_swap,NULL);
     log_info(logger, "## Memoria inicializada. Esperando Memory Sticks");
 }
 

@@ -14,6 +14,15 @@ typedef struct {
     uint32_t base_global;
     uint32_t tamanio;
     }t_memory_stick_info;
+typedf struct {
+    int id_segmento;
+    uint32_t tamanio;
+    int bloque_swap_inicio; // en que bloque de SWAP arranca
+    int cant_bloques; // cuantos bloques ocupa
+}t_segmento_swap;
+
+extern t_dictionary* segmentos_en_swap; // PID(string) -> t_list* de t_segmento_swap
+extern pthread_mutex_t m_swap;
 extern t_list* lista_sticks;
 extern uint32_t memoria_total;
 extern pthread_mutex_t m_sticks;
@@ -45,7 +54,7 @@ void liberar_todos_segmentos_pid(int pid);
 extern int fd_scheduler_global;
 extern int fd_swap;
 extern int swap_block_size;
-extern int swap_fiel_size;
+extern int swap_file_size;
 #endif
 
 

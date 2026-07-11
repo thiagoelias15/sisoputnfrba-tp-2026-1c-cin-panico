@@ -2,6 +2,7 @@
 #include "../core/memoria_core.h"
 #include "../memoria_administrador/memoria_administrador.h"
 #include "../config/config.h"
+#include <string.h>
 extern t_list* tabla_segmentos_global;
 extern pthread_mutex_t m_memoria;
 int fd_scheduler_global = -1;
@@ -177,11 +178,15 @@ void* atender_cliente(void* arg) {
                 break;
             }
             
-              case SWAP_ESCRITURA: {
-                // Suspender proceso: mover segmentos de sticks a SWAP
+                case SWAP_ESCRITURA: {
                 int pid;
                 recv(fd_cliente, &pid, sizeof(int), MSG_WAITALL);
                 log_info(logger, "## PID: %d - Suspendiendo, moviendo segmentos a SWAP", pid);
+
+                char clave_pid[10];
+                sprintf(clave_pid, "%d", pid);
+
+                t_list* lista_seg_swap = list_create();
 
                 pthread_mutex_lock(&m_memoria);
                 for(int i = 0; i < list_size(tabla_segmentos_global); i++) {
@@ -193,11 +198,31 @@ void* atender_cliente(void* arg) {
                         leer_de_sticks(seg->base, datos, seg->tamanio);
                         pthread_mutex_lock(&m_memoria);
 
-                        // Escribir en SWAP bloque por bloque
+                        // Calcular cuántos bloques necesita
                         int bloques_necesarios = (seg->tamanio + swap_block_size - 1) / swap_block_size;
+
+                        // Guardar info del segmento para poder restaurarlo
+                        t_segmento_swap* seg_swap = malloc(sizeof(t_segmento_swap));
+                        seg_swap->id_segmento = seg->id;
+                        seg_swap->tamanio = seg->tamanio;
+                        seg_swap->bloque_swap_inicio = proximo_bloque_swap;
+                        seg_swap->cant_bloques = bloques_necesarios;
+                        list_add(lista_seg_swap, seg_swap);
+
+                        // Escribir en SWAP bloque por bloque
                         for(int b = 0; b < bloques_necesarios; b++) {
-                            // Buscar bloque libre en SWAP (usamos base del segmento como referencia)
-                            int num_bloque = (seg->base / swap_block_size) + b;
+                            int num_bloque = proximo_bloque_swap + b;
+                            int bytes_a_escribir = swap_block_size;
+                            int offset = b * swap_block_size;
+
+                            // El último bloque puede ser más chico
+                            if(offset + bytes_a_escribir > (int)seg->tamanio) {
+                                bytes_a_escribir = seg->tamanio - offset;
+                            }
+
+                            // Preparar buffer del tamaño del bloque (rellenar con ceros si sobra)
+                            void* bloque = calloc(1, swap_block_size);
+                            memcpy(bloque, datos + offset, bytes_a_escribir);
 
                             op_code op_sw = SWAP_ESCRITURA;
                             send(fd_swap, &op_sw, sizeof(op_code), 0);
@@ -206,21 +231,32 @@ void* atender_cliente(void* arg) {
                             // El SWAP espera recibir_mensaje (tamaño + datos)
                             int tam_bloque = swap_block_size;
                             send(fd_swap, &tam_bloque, sizeof(int), 0);
-                            send(fd_swap, datos + (b * swap_block_size), swap_block_size, 0);
+                            send(fd_swap, bloque, swap_block_size, 0);
 
                             // Recibir confirmación "OK"
                             recibir_operacion(fd_swap);
-                            char* ok = recibir_mensaje(fd_swap);
-                            free(ok);
+                            char* ok_msg = recibir_mensaje(fd_swap);
+                            free(ok_msg);
+                            free(bloque);
                         }
+
+                        proximo_bloque_swap += bloques_necesarios;
                         free(datos);
 
                         // Liberar el segmento en memoria
                         seg->ocupado = 0;
                         seg->pid = -1;
+                        log_info(logger, "## PID: %d - Segmento %d movido a SWAP (bloques %d-%d)",
+                            pid, seg_swap->id_segmento, seg_swap->bloque_swap_inicio,
+                            seg_swap->bloque_swap_inicio + seg_swap->cant_bloques - 1);
                     }
                 }
                 pthread_mutex_unlock(&m_memoria);
+
+                // Guardar la lista de segmentos en el diccionario
+                pthread_mutex_lock(&m_swap);
+                dictionary_put(segmentos_en_swap, clave_pid, lista_seg_swap);
+                pthread_mutex_unlock(&m_swap);
 
                 int ok = 1;
                 send(fd_cliente, &ok, sizeof(int), 0);
@@ -228,17 +264,34 @@ void* atender_cliente(void* arg) {
             }
 
             case SWAP_LECTURA: {
-                // Des-suspender proceso: restaurar segmentos de SWAP a sticks
                 int pid;
                 recv(fd_cliente, &pid, sizeof(int), MSG_WAITALL);
                 log_info(logger, "## PID: %d - Intentando des-suspender desde SWAP", pid);
 
-                // Primero verificamos si hay espacio suficiente
-                // Calculamos cuánto espacio necesita el proceso
-                // si hay espacio libre total >= lo que necesita, lo restauramos
-                int espacio_necesario = 0;
-                int espacio_libre = 0;
+                char clave_pid[10];
+                sprintf(clave_pid, "%d", pid);
 
+                // Buscar qué segmentos tenía este proceso en SWAP
+                pthread_mutex_lock(&m_swap);
+                if(!dictionary_has_key(segmentos_en_swap, clave_pid)) {
+                    pthread_mutex_unlock(&m_swap);
+                    log_warning(logger, "## PID: %d - No tiene segmentos en SWAP", pid);
+                    int resultado = 1;  // No tiene nada que restaurar, puede volver
+                    send(fd_cliente, &resultado, sizeof(int), 0);
+                    break;
+                }
+                t_list* lista_seg_swap = dictionary_get(segmentos_en_swap, clave_pid);
+                pthread_mutex_unlock(&m_swap);
+
+                // Calcular cuánto espacio necesita
+                int espacio_necesario = 0;
+                for(int i = 0; i < list_size(lista_seg_swap); i++) {
+                    t_segmento_swap* ss = list_get(lista_seg_swap, i);
+                    espacio_necesario += ss->tamanio;
+                }
+
+                // Verificar espacio libre sin compactar
+                int espacio_libre = 0;
                 pthread_mutex_lock(&m_memoria);
                 for(int i = 0; i < list_size(tabla_segmentos_global); i++) {
                     t_segmento_memoria* seg = list_get(tabla_segmentos_global, i);
@@ -248,15 +301,69 @@ void* atender_cliente(void* arg) {
                 }
                 pthread_mutex_unlock(&m_memoria);
 
-                // respondemos 1 (éxito) si hay algo de espacio libre
-                // y 0 si no hay nada
-                if(espacio_libre <= 0) {
+                if(espacio_libre < espacio_necesario) {
                     int resultado = 0;
                     send(fd_cliente, &resultado, sizeof(int), 0);
+                    log_info(logger, "## PID: %d - No hay espacio para des-suspender (necesita %d, libre %d)",
+                        pid, espacio_necesario, espacio_libre);
                     break;
                 }
 
-                // Hay espacio, respondemos éxito
+                // Hay espacio, restaurar cada segmento
+                for(int i = 0; i < list_size(lista_seg_swap); i++) {
+                    t_segmento_swap* ss = list_get(lista_seg_swap, i);
+
+                    // Leer datos desde SWAP
+                    void* datos = malloc(ss->tamanio);
+                    for(int b = 0; b < ss->cant_bloques; b++) {
+                        int num_bloque = ss->bloque_swap_inicio + b;
+
+                        op_code op_sw = SWAP_LECTURA;
+                        send(fd_swap, &op_sw, sizeof(op_code), 0);
+                        send(fd_swap, &num_bloque, sizeof(int), 0);
+
+                        void* bloque = malloc(swap_block_size);
+                        recv(fd_swap, bloque, swap_block_size, MSG_WAITALL);
+
+                        int offset = b * swap_block_size;
+                        int bytes_a_copiar = swap_block_size;
+                        if(offset + bytes_a_copiar > (int)ss->tamanio) {
+                            bytes_a_copiar = ss->tamanio - offset;
+                        }
+                        memcpy(datos + offset, bloque, bytes_a_copiar);
+                        free(bloque);
+                    }
+
+                    // Asignar memoria en los sticks
+                    int id_asignado = asignar_memoria(pid, ss->tamanio);
+                    if(id_asignado != -1) {
+                        // Buscar la base del segmento recién asignado
+                        uint32_t base_nueva = 0;
+                        pthread_mutex_lock(&m_memoria);
+                        for(int j = 0; j < list_size(tabla_segmentos_global); j++) {
+                            t_segmento_memoria* seg = list_get(tabla_segmentos_global, j);
+                            if(seg->pid == pid && seg->tamanio == ss->tamanio) {
+                                seg->id = ss->id_segmento;
+                                base_nueva = seg->base;
+                                break;
+                            }
+                        }
+                        pthread_mutex_unlock(&m_memoria);
+
+                        // Escribir los datos en el stick
+                        escribir_en_sticks(base_nueva, datos, ss->tamanio);
+                        log_info(logger, "## PID: %d - Segmento %d restaurado desde SWAP en base %d",
+                            pid, ss->id_segmento, base_nueva);
+                    }
+                    free(datos);
+                }
+
+                // Limpiar la entrada del diccionario
+                pthread_mutex_lock(&m_swap);
+                dictionary_remove(segmentos_en_swap, clave_pid);
+                pthread_mutex_unlock(&m_swap);
+                list_destroy_and_destroy_elements(lista_seg_swap, free);
+
                 int resultado = 1;
                 send(fd_cliente, &resultado, sizeof(int), 0);
                 log_info(logger, "## PID: %d - Des-suspendido exitosamente", pid);
