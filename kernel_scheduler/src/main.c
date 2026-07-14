@@ -19,7 +19,8 @@ sem_t sem_procesos_ready;
 t_dictionary* dic_mutex;
 t_dictionary* dic_interfaces;
 
-int fd_cpu = -1;
+t_list* lista_cpu_sched;
+pthread_mutex_t m_cpus_sched;
 int fd_memoria = -1;
 t_log* logger;
 int scheduler_corriendo = 1;

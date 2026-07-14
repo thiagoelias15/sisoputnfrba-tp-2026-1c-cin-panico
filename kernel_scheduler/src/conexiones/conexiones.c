@@ -102,8 +102,13 @@ void *atender_cliente(void *arg)
     if (strcmp(id_recibida, "CPU") == 0)
     {
 
-        fd_cpu = socket_cliente;
-        log_info(logger, "## CPU <ID CPU> conectada");
+       t_cpu_info* cpu_nueva = malloc(sizeof(t_cpu_info));
+        cpu_nueva->fd_cpu = socket_cliente;
+        cpu_nueva->pid_ejecutando = -1;
+        pthread_mutex_lock(&m_cpus_sched);
+        list_add(lista_cpus_sched, cpu_nueva);
+        pthread_mutex_unlock(&m_cpus_sched);
+        log_info(logger, "## CPU <ID CPU> conectada",socket_cliente);
 
         while (scheduler_corriendo)
         {
@@ -113,6 +118,15 @@ void *atender_cliente(void *arg)
                 break;
             t_pcb *pcb_upd = recibir_pcb(fd_cpu);
             pcb_en_ejecucion = NULL;
+             pthread_mutex_lock(&m_cpus_sched);
+            for(int i = 0; i < list_size(lista_cpus_sched); i++) {
+                t_cpu_info* ci = list_get(lista_cpus_sched, i);
+                if(ci->fd_cpu == socket_cliente) {
+                    ci->pid_ejecutando = -1;
+                    break;
+                }
+            }
+            pthread_mutex_unlock(&m_cpus_sched);
             sem_post(&sem_cpu_libre);
 
             switch (cod_op)
