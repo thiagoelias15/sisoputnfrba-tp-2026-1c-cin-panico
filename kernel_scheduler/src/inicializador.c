@@ -35,6 +35,8 @@ void inicializar_estructuras(void) {
     pthread_mutex_init(&m_block, NULL);
     pthread_mutex_init(&m_exit, NULL);
     sem_init(&sem_procesos_ready, 0, 0);
+    lista_cpus_sched = list_create();
+    pthread_mutex_init(&m_cpus_sched, NULL);
 }
 void crear_proceso(char* nombre_archivo, int prioridad) {
     int pid_nuevo = PID_GLOBAL;

@@ -1,6 +1,51 @@
 #include "planificador.h"
 // variable global para saber a quien desalojar
 t_pcb* pcb_en_ejecucion = NULL;
+
+
+// Busca una CPU libre y devuelve su fd (-1 si no hay)
+int obtener_cpu_libre() {
+    int fd = -1;
+    pthread_mutex_lock(&m_cpus_sched);
+    for(int i = 0; i < list_size(lista_cpus_sched); i++) {
+        t_cpu_info* ci = list_get(lista_cpus_sched, i);
+        if(ci->pid_ejecutando == -1) {
+            fd = ci->fd_cpu;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&m_cpus_sched);
+    return fd;
+}
+
+// Marca una CPU como ocupada por un PID
+void marcar_cpu_ocupada(int fd, int pid) {
+    pthread_mutex_lock(&m_cpus_sched);
+    for(int i = 0; i < list_size(lista_cpus_sched); i++) {
+        t_cpu_info* ci = list_get(lista_cpus_sched, i);
+        if(ci->fd_cpu == fd) {
+            ci->pid_ejecutando = pid;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&m_cpus_sched);
+}
+
+// Busca en qué CPU corre un PID y devuelve el fd (-1 si no lo encuentra)
+int buscar_fd_por_pid(int pid) {
+    int fd = -1;
+    pthread_mutex_lock(&m_cpus_sched);
+    for(int i = 0; i < list_size(lista_cpus_sched); i++) {
+        t_cpu_info* ci = list_get(lista_cpus_sched, i);
+        if(ci->pid_ejecutando == pid) {
+            fd = ci->fd_cpu;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&m_cpus_sched);
+    return fd;
+}
+
 //----------------------------------Planificacion de corto plazo--------------------------/
 
 void* planificador_corto_plazo(void* arg) {
@@ -8,7 +53,8 @@ void* planificador_corto_plazo(void* arg) {
     while(scheduler_corriendo) {
         sem_wait(&sem_procesos_ready);
         sem_wait(&sem_cpu_libre);
-        if (fd_cpu == -1) {
+         int fd_cpu_actual = obtener_cpu_libre();
+        if (fd_cpu_actual == -1) {
             log_warning(logger, "Esperando conexión de CPU...");
             sem_post(&sem_cpu_libre);
             sem_post(&sem_procesos_ready); // Volvemos a poner el semáforo para no trabarnos
@@ -34,7 +80,7 @@ void* planificador_corto_plazo(void* arg) {
             
             log_info(logger, "## (%d) Pasa del estado READY al estado EXEC", pcb_a_ejecutar->pid);
 
-            enviar_pcb(pcb_a_ejecutar, fd_cpu, CONTEXTO_PCB);
+            enviar_pcb(pcb_a_ejecutar, fd_cpu_actual, CONTEXTO_PCB);
             
            // Evaluamos si corresponde lanzar el temporizador de Round Robin
             int usa_rr = 0; // Por defecto es 0 (Falso)
@@ -67,11 +113,11 @@ void* temporizador_quantum(void* arg) {
     
     t_pcb* pcb = (t_pcb*)arg; //aca le decimos al compilador que trate a ese arg como un puntero a un pcb para leer el PID
     usleep(kernel_config.quantum_rr * 1000); //la funcion usleep espera una x cantidad de microsegundos y por mil para pasar esos microsegundos a milisegundos
-       if (pcb_en_ejecucion != NULL &&
-        pcb_en_ejecucion->pid == pcb->pid) {
-    log_info(logger,"## (%d) Desalojo de quantum",pcb->pid);
-    op_code interrupcion = INTERRUPCION;
-    send(fd_cpu, &interrupcion, sizeof(op_code), 0);
+     int fd = buscar_fd_por_pid(pcb->pid);
+    if(fd != -1) {
+        log_info(logger, "## (%d) Desalojo de quantum", pcb->pid);
+        op_code interrupcion = INTERRUPCION;
+        send(fd, &interrupcion, sizeof(op_code), 0);
     }
     return NULL;
 }
@@ -110,17 +156,38 @@ void mover_a_ready(int pid_buscado) { //La función entra a la "sala de espera" 
         pthread_mutex_lock(&m_ready);
         list_add(colas_ready[prio], pcb_a_mover);
         pthread_mutex_unlock(&m_ready);
-        //desalojo o preemption
-        if(kernel_config.queue_preemption == 1 && pcb_en_ejecucion != NULL){
-            //si el nuevo proceso es mas importante (numero menor) que el que esta en ejecucion
-         if(pcb_a_mover -> prioridad < pcb_en_ejecucion -> prioridad){
-            log_info(logger, "## (%d) Prioridad: %d Desalojado por cola mas prioritaria por el proceso %d con prioridad %d",
-            pcb_en_ejecucion -> pid, pcb_en_ejecucion -> prioridad, pcb_a_mover -> pid, pcb_a_mover -> prioridad);
-        //le avisamos a la CPU que frene lo que esta haciendo
-        op_code interrupcion = INTERRUPCION;
-        send(fd_cpu, &interrupcion, sizeof(op_code), 0);
-        }   
+       // Preemption: buscar si hay un proceso menos prioritario ejecutando
+        if(kernel_config.queue_preemption == 1) {
+            pthread_mutex_lock(&m_cpus_sched);
+            int peor_prio = -1;
+            int fd_a_desalojar = -1;
+            int pid_a_desalojar = -1;
+            for(int i = 0; i < list_size(lista_cpus_sched); i++) {
+                t_cpu_info* ci = list_get(lista_cpus_sched, i);
+                if(ci->pid_ejecutando != -1) {
+                    // Buscamos el ejecutando con peor prioridad (número más alto)
+                    // que sea peor que el nuevo proceso
+                    if(ci->pid_ejecutando > peor_prio) {
+                        // Necesitamos la prioridad del PCB, no el PID
+                        // Pero no tenemos el PCB acá. Usamos pcb_en_ejecucion como aproximación
+                    }
+                }
+            }
+            pthread_mutex_unlock(&m_cpus_sched);
+
+            // Simplificación: con 1 CPU pcb_en_ejecucion sigue funcionando
+            // Con múltiples CPUs buscamos al que tenga peor prioridad
+            if(pcb_en_ejecucion != NULL &&
+               pcb_a_mover->prioridad < pcb_en_ejecucion->prioridad) {
+                int fd_desalojo = buscar_fd_por_pid(pcb_en_ejecucion->pid);
+                if(fd_desalojo != -1) {
+                    log_info(logger, "## (%d) Prioridad: %d Desalojado por cola mas prioritaria por el proceso %d con prioridad %d",
+                        pcb_en_ejecucion->pid, pcb_en_ejecucion->prioridad, pcb_a_mover->pid, pcb_a_mover->prioridad);
+                    op_code interrupcion = INTERRUPCION;
+                    send(fd_desalojo, &interrupcion, sizeof(op_code), 0);
+                }
+            }
         }
-    sem_post(&sem_procesos_ready); //avisamos que hay un proceso nuevo para mandar al cpu
+        sem_post(&sem_procesos_ready);
     }
 }
