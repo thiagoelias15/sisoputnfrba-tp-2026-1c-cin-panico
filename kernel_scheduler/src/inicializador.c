@@ -24,6 +24,9 @@ void inicializar_estructuras(void) {
     cola_exec = list_create();
     cola_block = list_create();
     cola_exit = list_create();
+    cola_susp_block = list_create();
+    cola_susp_ready = list_create();
+    pthread_mutex_init(&m_susp, NULL);
     dic_mutex = dictionary_create();
     dic_interfaces = dictionary_create();
 

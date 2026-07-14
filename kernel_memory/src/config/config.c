@@ -12,6 +12,8 @@ void cargar_configuracion_memoria(char* path){
     memoria_config.instruction_delay = config_get_int_value(memoria_config.config_base, "INSTRUCTION_DELAY");
     memoria_config.compaction_delay = config_get_int_value(memoria_config.config_base, "COMPACTION_DELAY");
     memoria_config.scripts_basepath = config_get_string_value(memoria_config.config_base, "SCRIPTS_BASEPATH");
+    memoria_config.ip_swap = config_get_string_value(memoria_config.config_base, "IP_SWAP");
+    memoria_config.puerto_swap = config_get_string_value(memoria_config.config_base, "PUERTO_SWAP");
 }
 
 void destruir_configuracion_memoria() {

@@ -1,30 +1,39 @@
 #include "memoria_administrador.h"
 #include "../main.h"
+#include "../config/config.h"
+static t_memory_stick_info* buscar_stick(uint32_t dir_global);
 
 t_list* tabla_segmentos_global;
 pthread_mutex_t m_memoria;
-void* espacio_memoria_real;
 t_dictionary* mapeo_archivos_procesos;
+t_list* lista_sticks;
+uint32_t memoria_total = 0;
+pthread_mutex_t m_sticks;
+t_list* lista_cpus_conectadas;
+pthread_mutex_t m_cpus;
+int fd_swap = -1;
+int swap_block_size = 0;
+int swap_file_size = 0;
+t_dictionary* segmentos_en_swap;
+pthread_mutex_t m_swap;
+int proximo_bloque_swap = 0; // para saber que bloque de swap esta libre
+
 void inicializar_memoria() {
     tabla_segmentos_global = list_create();
     pthread_mutex_init(&m_memoria, NULL);
-    // reservamos el bloque de memoria
-    espacio_memoria_real = malloc(memoria_config.memoria_operando);
-
-    //creamos el segmento inicial(toda la memoria libre)
-    t_segmento_memoria* segmento_inicial = malloc(sizeof(t_segmento_memoria));
-    segmento_inicial -> id = 0;
-    segmento_inicial -> pid = -1; //-1 es libre
-    segmento_inicial -> base = 0;
-    segmento_inicial -> tamanio = memoria_config.memoria_operando;
-    segmento_inicial -> ocupado = 0;
-
-    list_add(tabla_segmentos_global, segmento_inicial);
-    log_info(logger, "## Memoria inicializada. Segmento inicial creado (Base: 0, Tamaño: %d)", 
-             memoria_config.memoria_operando);
-             mapeo_archivos_procesos = dictionary_create();
+    mapeo_archivos_procesos = dictionary_create();
+    lista_sticks = list_create();
+    pthread_mutex_init(&m_sticks,NULL);
+    lista_cpus_conectadas = list_create();
+    pthread_mutex_init(&m_cpus,NULL);
+    segmentos_en_swap = dictionary_create();
+    pthread_mutex_init(&m_swap,NULL);
+    log_info(logger, "## Memoria inicializada. Esperando Memory Sticks");
 }
-// funcion best fit: recorre la tabla global y elige el segmento libre mas pequeño que entra el nuevo proceso
+
+
+
+    // funcion best fit: recorre la tabla global y elige el segmento libre mas pequeño que entra el nuevo proceso
 
 t_segmento_memoria* buscar_hueco_best_fit(uint32_t tamanio_necesario){
     t_segmento_memoria* mejor_hueco = NULL;
@@ -40,19 +49,35 @@ t_segmento_memoria* buscar_hueco_best_fit(uint32_t tamanio_necesario){
     return mejor_hueco;
 }
 
+t_segmento_memoria* buscar_hueco_worst_fit(uint32_t tamanio_necesario){
+    t_segmento_memoria* peor_hueco = NULL;
+    for(int i= 0; i < list_size(tabla_segmentos_global); i++){
+        t_segmento_memoria* seg = list_get(tabla_segmentos_global, i);
+        if(seg->ocupado == 0 && seg->tamanio >= tamanio_necesario){
+            if(peor_hueco == NULL || seg->tamanio > peor_hueco->tamanio){
+                peor_hueco = seg;
+            }
+        }
+    }
+    return peor_hueco;
+}
 // asignar memoria: llama a best fit y "parte" el hueco encontrado, 1. encuenta el hueco,2.si es mas grande que el pedido, crea un nuevo segmento de "resto"
 // 3. actualiza los punteros y marcas de ocupado
 
 int asignar_memoria(int pid, uint32_t tamanio) {
     pthread_mutex_lock(&m_memoria); // bloqueamos el acceso para que nadie mas la toque la tabla
-    t_segmento_memoria* hueco = buscar_hueco_best_fit(tamanio);
-
-    if(hueco == NULL) {
-        pthread_mutex_unlock(&m_memoria);
-        return -1; // no hay espacio
-    }
+   t_segmento_memoria* hueco = NULL;
+   if(strcmp(memoria_config.allocation_strategy, "BEST")== 0){
+    hueco = buscar_hueco_best_fit(tamanio);
+   }else{
+    hueco = buscar_hueco_worst_fit(tamanio);
+   }
 
     // si sobra espacio, creamos un nuevo segmento con el "resto"
+    if(hueco == NULL){
+        pthread_mutex_unlock(&m_memoria);
+        return -1;
+    }
     if(hueco -> tamanio > tamanio) {
         t_segmento_memoria* resto = malloc(sizeof(t_segmento_memoria));
         resto -> id = list_size(tabla_segmentos_global); // ID nuevo
@@ -92,6 +117,7 @@ void liberar_memoria(int pid, int id_segmento){
 
 void compactar_memoria() {
     log_info(logger, "## Iniciando proceso de compactacion");
+    usleep(memoria_config.compaction_delay * 1000); 
     pthread_mutex_lock(&m_memoria);
 
     uint32_t direccion_actual = 0;
@@ -103,39 +129,136 @@ void compactar_memoria() {
         if(seg -> ocupado == 1){
             // si la base es distinta a la actual, hay que mover los datos
             if(seg -> base != direccion_actual){
-            //movemos los datos en el espacio real de memoria
-                memcpy(espacio_memoria_real + direccion_actual, espacio_memoria_real + seg -> base, seg -> tamanio);
-
-        // actualizamos la direccion base en la estructura
-                seg -> base =  direccion_actual;
+          //leer datos del stick viejo y escribirlos en la posicion nueva
+          void* buffer = malloc(seg->tamanio);
+          leer_de_sticks(seg->base, buffer, seg->tamanio);
+          escribir_en_sticks(direccion_actual, buffer, seg->tamanio);
+                free(buffer);
+                log_info(logger, "## Segmento %d movido de %d a %d", seg->id, seg->base, direccion_actual);
+                seg -> base = direccion_actual;
             }
             direccion_actual += seg -> tamanio;
         }
     }
-// limpiamos la tabla: eliminamos todos los huecos libres y creamos uno solo gigante al final
-// primero, eliminamos los segmentos libres actuales de la lista
-    for(int i = list_size(tabla_segmentos_global)-1; i>=0; i--){
-        t_segmento_memoria* seg = list_get(tabla_segmentos_global,i);
-        if(seg-> ocupado == 0){
-        list_remove_and_destroy_element(tabla_segmentos_global, i, free);
+//eliminar huecos libers
+    for(int i = list_size(tabla_segmentos_global) - 1; i >= 0; i--){
+        t_segmento_memoria* seg = list_get(tabla_segmentos_global, i);
+        if(seg -> ocupado == 0){
+            list_remove_and_destroy_element(tabla_segmentos_global, i, free);
         }
     }
-
-// creamos el nuevo gran hueco libre al final
+// creamos el nuevo hueco libre
     t_segmento_memoria* gran_hueco = malloc(sizeof(t_segmento_memoria));
     gran_hueco -> id = list_size(tabla_segmentos_global);
     gran_hueco -> pid = -1;
     gran_hueco -> base = direccion_actual;
-    gran_hueco -> tamanio = memoria_config.memoria_operando - direccion_actual;
+    gran_hueco -> tamanio = memoria_total - direccion_actual;
     gran_hueco -> ocupado = 0;
-
     list_add(tabla_segmentos_global, gran_hueco);
-    log_info(logger,"## Compactacion finalizada. Memoria unifica al final");
+    log_info(logger, "## Compactacion finalizada.");
     pthread_mutex_unlock(&m_memoria);
-
+}
+static t_memory_stick_info* buscar_stick(uint32_t dir_global){
+     for(int i = 0; i < list_size(lista_sticks); i++) {
+        t_memory_stick_info* s = list_get(lista_sticks, i);
+        if(dir_global >= s->base_global && dir_global < s->base_global + s->tamanio) {
+            return s;
+        }
+    }
+    return NULL;
 }
 
-void liberar_todos_segmentos_pid(int pid){
+//funcion que busca a que stick pertenece una direccion global y le pidea que lea
+   void leer_de_sticks(uint32_t dir_global, void* buffer, uint32_t tamanio) {
+    pthread_mutex_lock(&m_sticks);
+
+    uint32_t bytes_leidos = 0;
+    while(bytes_leidos < tamanio) {
+        uint32_t dir_actual = dir_global + bytes_leidos;
+        t_memory_stick_info* stick = buscar_stick(dir_actual);
+        if(stick == NULL){
+            log_error(logger, "## Direccion fisica %d no pertenece a ningun stick", dir_actual);
+            pthread_mutex_unlock(&m_sticks);
+            return;
+        }
+        uint32_t dir_local = dir_actual - stick->base_global;
+        uint32_t espacio_en_stick = stick->tamanio - dir_local;
+        uint32_t cuanto_leer = tamanio - bytes_leidos;
+        if(cuanto_leer > espacio_en_stick) cuanto_leer = espacio_en_stick;
+
+        op_code op = LEER_MEMORIA;
+        int d = (int)dir_local;
+        int t = (int)cuanto_leer;
+
+        if(send(stick->fd_socket, &op, sizeof(op_code), 0) <= 0 ||
+           send(stick->fd_socket, &d, sizeof(int), 0) <= 0 ||
+           send(stick->fd_socket, &t, sizeof(int), 0) <= 0 ||
+           recv(stick->fd_socket, buffer + bytes_leidos, cuanto_leer, MSG_WAITALL) <= 0) {
+            
+            log_error(logger, "## Memory Stick desconectado! Memoria corrupta");
+            pthread_mutex_unlock(&m_sticks);
+            
+            // Avisarle al Scheduler
+            if(fd_scheduler_global != -1) {
+                op_code alerta = MEMORIA_CORRUPTA;
+                send(fd_scheduler_global, &alerta, sizeof(op_code), 0);
+            }
+            return;
+        }
+
+        bytes_leidos += cuanto_leer;
+    }
+
+    pthread_mutex_unlock(&m_sticks);
+}
+
+// busca a que stick pertenece una direccion global y le pide que excriba
+   void escribir_en_sticks(uint32_t dir_global, void* datos, uint32_t tamanio) {
+    pthread_mutex_lock(&m_sticks);
+
+    uint32_t bytes_escritos = 0;
+    while(bytes_escritos < tamanio) {
+        uint32_t dir_actual = dir_global + bytes_escritos;
+        t_memory_stick_info* stick = buscar_stick(dir_actual);
+        if(stick == NULL) {
+    log_error(logger, "## Dirección física %d no pertenece a ningún stick!", dir_actual);
+    pthread_mutex_unlock(&m_sticks);
+    return;
+}
+        uint32_t dir_local = dir_actual - stick->base_global;
+        uint32_t espacio_en_stick = stick->tamanio - dir_local;
+        uint32_t cuanto_escribir = tamanio - bytes_escritos;
+        if(cuanto_escribir > espacio_en_stick) cuanto_escribir = espacio_en_stick;
+
+        op_code op = ESCRIBIR_MEMORIA;
+        int d = (int)dir_local;
+        int t = (int)cuanto_escribir;
+
+        if(send(stick->fd_socket, &op, sizeof(op_code), 0) <= 0 ||
+           send(stick->fd_socket, &d, sizeof(int), 0) <= 0 ||
+           send(stick->fd_socket, &t, sizeof(int), 0) <= 0 ||
+           send(stick->fd_socket, datos + bytes_escritos, cuanto_escribir, 0) <= 0) {
+            
+            log_error(logger, "## Memory Stick desconectado! Memoria corrupta");
+            pthread_mutex_unlock(&m_sticks);
+            
+            if(fd_scheduler_global != -1) {
+                op_code alerta = MEMORIA_CORRUPTA;
+                send(fd_scheduler_global, &alerta, sizeof(op_code), 0);
+            }
+            return;
+        }
+
+        recibir_operacion(stick->fd_socket);
+        char* ok = recibir_mensaje(stick->fd_socket);
+        free(ok);
+
+        bytes_escritos += cuanto_escribir;
+    }
+
+    pthread_mutex_unlock(&m_sticks);
+}
+    void liberar_todos_segmentos_pid(int pid){
     pthread_mutex_lock(&m_memoria);
 
 

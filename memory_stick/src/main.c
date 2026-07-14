@@ -33,12 +33,25 @@ int main(int argc, char* argv[]) {
     }
     // ------------------------------ CONEXIONES ------------------------------ //
 
+int fd_escucha = iniciar_servidor(ms_config.puerto_escucha);
+    log_info(logger, "Memory Stick listo. Escuchando en puerto %s", ms_config.puerto_escucha);
+
+    // DESPUÉS nos conectamos a KM
     int fd_memoria = crear_conexion(ms_config.ip_memoria, ms_config.puerto_memoria);
     
     if(fd_memoria != -1) {
         enviar_mensaje(ms_config.id_modulo, MENSAJE, fd_memoria);
         send(fd_memoria, &tamanio_memoria, sizeof(int), 0);
-        log_info(logger, "Memory Stick conectado a Kernel Memory");
+
+        int len_ip = strlen(ms_config.ip_escucha) + 1;
+        send(fd_memoria, &len_ip, sizeof(int), 0);
+        send(fd_memoria, ms_config.ip_escucha, len_ip, 0);
+
+        int len_puerto = strlen(ms_config.puerto_escucha) + 1;
+        send(fd_memoria, &len_puerto, sizeof(int), 0);
+        send(fd_memoria, ms_config.puerto_escucha, len_puerto, 0);
+
+        log_info(logger, "## Conectado a Kernel Memory");
     } else {
         log_error(logger, "No se pudo conectar a memoria");
         free(espacio_memoria);
@@ -46,22 +59,20 @@ int main(int argc, char* argv[]) {
         log_destroy(logger);
         return EXIT_FAILURE;
     }
-        // Servidor para las CPUs
-        int fd_escucha = iniciar_servidor(ms_config.puerto_escucha);
-        log_info(logger, "Memory Stick listo. Escuchando peticiones de lectura/escritura de CPUs");
-        
-        while(ms_corriendo) {
-            int* socket_cpu = malloc(sizeof(int));
-            *socket_cpu  = esperar_cliente(fd_escucha);
-        
-            if(*socket_cpu != -1) {
-              pthread_t hilo_cpu;
-              pthread_create(&hilo_cpu, NULL, atender_cpu, socket_cpu);
-              pthread_detach(hilo_cpu);
-            } else {
-                free(socket_cpu);
-            }
+
+    // Escuchamos conexiones de CPUs y KM
+    while(ms_corriendo) {
+        int* socket_cliente = malloc(sizeof(int));
+        *socket_cliente = esperar_cliente(fd_escucha);
+    
+        if(*socket_cliente != -1) {
+          pthread_t hilo;
+          pthread_create(&hilo, NULL, atender_cpu, socket_cliente);
+          pthread_detach(hilo);
+        } else {
+            free(socket_cliente);
         }
+    }
     
     // ------------------------------ LIMPIEZA DE LA MEMORIA ------------------------------ //
     free(espacio_memoria);

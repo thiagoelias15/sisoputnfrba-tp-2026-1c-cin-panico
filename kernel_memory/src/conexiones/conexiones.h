@@ -8,6 +8,8 @@
 #include "../../../utils/src/utils/serializacion/serializacion.h"
 
 extern t_log* logger;
+extern int fd_scheduler_global;
+extern int proximo_bloque_swap;
 
 // Función que va a ejecutar cada hilo para atender a un cliente específico
 void* atender_cliente(void* arg);

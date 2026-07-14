@@ -15,7 +15,7 @@
 extern t_log* logger;
 extern pthread_mutex_t m_memoria;
 extern t_list* tabla_segmentos_global;
-extern void* espacio_memoria_real;
+
 
 void atender_fetch_cpu(int fd_cpu);
 void atender_consulta_espacio(int fd_kernel);

@@ -14,6 +14,7 @@ typedef struct {
     int quantum_rr;
     char** algoritmos_colas;
     int queue_preemption;
+    int suspension_timeout;
     t_config* config_base; 
 } t_kernel_config;
 

@@ -10,6 +10,6 @@
 extern t_log* logger;
 extern t_list* tabla_segmentos_global;
 extern pthread_mutex_t m_memoria;
-extern void* espacio_memoria_real;
+
 
 #endif

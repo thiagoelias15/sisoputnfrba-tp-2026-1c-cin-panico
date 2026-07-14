@@ -38,7 +38,7 @@ char* leer_instruccion_de_archivo(int pid, uint32_t pc) {
     char* nombre_archivo = dictionary_get(mapeo_archivos_procesos, clave_pid);
     if (nombre_archivo == NULL) {
         log_error(logger, "No se encontró un archivo registrado para el PID: %d", pid);
-        return "EXIT";
+        return strdup("EXIT");
     }
 
     char path_completo[256];
@@ -47,7 +47,7 @@ char* leer_instruccion_de_archivo(int pid, uint32_t pc) {
     FILE* archivo = fopen(path_completo, "r");
     if (archivo == NULL) {
         log_error(logger, "Error al abrir el archivo en la ruta: %s", path_completo);
-        return "EXIT";
+        return strdup("EXIT");
     }
 
     char* linea = malloc(128);
@@ -64,7 +64,7 @@ char* leer_instruccion_de_archivo(int pid, uint32_t pc) {
 
     fclose(archivo);
     free(linea);
-    return "EXIT"; 
+    return strdup("EXIT"); 
 }
 
 // Devolver lista de instrucciones (FETCH)
@@ -87,7 +87,7 @@ void atender_fetch_cpu(int fd_cpu) {
 
     log_info(logger, "DEBUG: Instrucción enviada manualmente.");
     
-    if (strcmp(instruccion, "EXIT") != 0) free(instruccion);
+   free(instruccion);
 }
 
 // Consulta el espacio real gestionado por memoria_administrador
@@ -118,9 +118,7 @@ void atender_lectura_memoria(int fd_modulo) {
     usleep(memoria_config.instruction_delay * 1000);
     
     void* buffer = malloc(tamanio);
-    pthread_mutex_lock(&m_memoria);
-    memcpy(buffer, espacio_memoria_real + dir_fisica, tamanio);
-    pthread_mutex_unlock(&m_memoria);
+    leer_de_sticks(dir_fisica, buffer, tamanio);
     
     send(fd_modulo, buffer, tamanio, 0);
     log_info(logger, "## Lectura - Dir. Física: %d - Tamaño: %d", dir_fisica, tamanio);
@@ -139,9 +137,7 @@ void atender_escritura_memoria(int fd_modulo) {
 
     usleep(memoria_config.instruction_delay * 1000);
     
-    pthread_mutex_lock(&m_memoria);
-    memcpy(espacio_memoria_real + dir_fisica, datos, tamanio);
-    pthread_mutex_unlock(&m_memoria);
+    escribir_en_sticks(dir_fisica, datos, tamanio);
 
     log_info(logger, "## Escritura - Dir. Física: %d - Tamaño: %d", dir_fisica, tamanio);
     
