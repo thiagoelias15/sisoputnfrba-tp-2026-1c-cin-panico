@@ -116,7 +116,7 @@ void *atender_cliente(void *arg)
             op_code cod_op = recibir_operacion(socket_cliente);
             if (cod_op == -1)
                 break;
-            t_pcb *pcb_upd = recibir_pcb(fd_cpu);
+            t_pcb *pcb_upd = recibir_pcb(socket_cliente);
             pcb_en_ejecucion = NULL;
              pthread_mutex_lock(&m_cpus_sched);
             for(int i = 0; i < list_size(lista_cpus_sched); i++) {
@@ -197,7 +197,7 @@ void *atender_cliente(void *arg)
             {
 
                 int tiempo_ms;
-                recv(fd_cpu, &tiempo_ms, sizeof(int), MSG_WAITALL);
+                recv(socket_cliente, &tiempo_ms, sizeof(int), MSG_WAITALL);
                 log_info(logger, "## (%d) Solicito syscall: SLEEP", pcb_upd->pid);
                 log_info(logger, "## (%d) Pasa del estado EXEC al estado BLOCK", pcb_upd->pid);
                 pthread_mutex_lock(&m_block);
@@ -229,7 +229,7 @@ void *atender_cliente(void *arg)
             case SYSCALL_MUTEX_CREATE:
             { // mutex create crea una cola con un nombre determinado y guarda en dictionary todas esas colas que va creando para no repetir
 
-                char *m_name = recibir_mensaje(fd_cpu); // recibe el nombre que mande la cpu
+                char *m_name = recibir_mensaje(socket_cliente); // recibe el nombre que mande la cpu
                 if (!dictionary_has_key(dic_mutex, m_name))
                 { // se fija si ya existe ese nombre
                     // Creamos la nueva estructura del pcb del main.h
@@ -239,7 +239,7 @@ void *atender_cliente(void *arg)
 
                     dictionary_put(dic_mutex, m_name, nuevo_mutex);
                 }
-                enviar_pcb(pcb_upd, fd_cpu, CONTEXTO_PCB);
+                enviar_pcb(pcb_upd, socket_cliente, CONTEXTO_PCB);
                 free(m_name);
                 break;
             }
@@ -247,7 +247,7 @@ void *atender_cliente(void *arg)
             case SYSCALL_MUTEX_LOCK:
             {
 
-                char *m_name = recibir_mensaje(fd_cpu);
+                char *m_name = recibir_mensaje(socket_cliente);
                 t_mutex *mutex_actual = dictionary_get(dic_mutex, m_name);
 
                 if (mutex_actual->owner == NULL)
@@ -255,7 +255,7 @@ void *atender_cliente(void *arg)
                     // Si el mutex está libre
                     log_info(logger, "## (%d) Toma el mutex %s", pcb_upd->pid, m_name);
                     mutex_actual->owner = pcb_upd;
-                    enviar_pcb(pcb_upd, fd_cpu, CONTEXTO_PCB);
+                    enviar_pcb(pcb_upd, socket_cliente, CONTEXTO_PCB);
                 }
                 else
                 {
@@ -301,7 +301,7 @@ void *atender_cliente(void *arg)
             case SYSCALL_MUTEX_UNLOCK:
             {
 
-                char *m_name = recibir_mensaje(fd_cpu);
+                char *m_name = recibir_mensaje(socket_cliente);
                 log_info(logger, "## (%d) Libera el mutex %s", pcb_upd->pid, m_name);
                 t_mutex *mutex_actual = dictionary_get(dic_mutex, m_name);
                 // restauro la prioridad original por si se la habian cambiado
@@ -319,7 +319,7 @@ void *atender_cliente(void *arg)
                 {
                     mutex_actual->owner = NULL; // Nadie lo estaba esperando, queda libre
                 }
-                enviar_pcb(pcb_upd, fd_cpu, CONTEXTO_PCB); // el proceso que solto el mutex vuelve a CPU para ejectuar la instruccion que sigue
+                enviar_pcb(pcb_upd, socket_cliente, CONTEXTO_PCB); // el proceso que solto el mutex vuelve a CPU para ejectuar la instruccion que sigue
                 free(m_name);
                 break;
             }
@@ -330,11 +330,11 @@ void *atender_cliente(void *arg)
                 int tam, dir, pid_sobrante; // Recibimos de la CPU los parámetros necesarios: tamaño y dirección física
                 // Recibimos de forma bloqueante el tamaño del buffer que STDIN debe leer
                 // MSG_WAITALL asegura que no continúe hasta recibir los 4 bytes del int
-                recv(fd_cpu, &tam, sizeof(int), MSG_WAITALL);
+                recv(socket_cliente, &tam, sizeof(int), MSG_WAITALL);
                 // Recibimos la dirección física de memoria donde se debe escribir lo ingresado
                 // Esta información la envía la CPU tras traducir la dirección lógica
-                recv(fd_cpu, &dir, sizeof(int), MSG_WAITALL);
-                recv(fd_cpu, &pid_sobrante, sizeof(int), MSG_WAITALL);
+                recv(socket_cliente, &dir, sizeof(int), MSG_WAITALL);
+                recv(socket_cliente, &pid_sobrante, sizeof(int), MSG_WAITALL);
                 log_info(logger, "##(%d) Solicitó syscall: STDIN", pcb_upd->pid);
                 log_info(logger, "##(%d) Pasa del estado EXEC al estado BLOCK", pcb_upd->pid);
                 pthread_mutex_lock(&m_block);   // Bloquea acceso a cola de bloqueados
@@ -367,9 +367,9 @@ void *atender_cliente(void *arg)
             {
 
                 int tam, dir, pid_sobrante;
-                recv(fd_cpu, &tam, sizeof(int), MSG_WAITALL); // Recibe tamaño a mostrar desde CPU
-                recv(fd_cpu, &dir, sizeof(int), MSG_WAITALL); // Recibe dirección física de orígen
-                recv(fd_cpu, &pid_sobrante, sizeof(int), MSG_WAITALL);
+                recv(socket_cliente, &tam, sizeof(int), MSG_WAITALL); // Recibe tamaño a mostrar desde CPU
+                recv(socket_cliente, &dir, sizeof(int), MSG_WAITALL); // Recibe dirección física de orígen
+                recv(socket_cliente, &pid_sobrante, sizeof(int), MSG_WAITALL);
                 log_info(logger, "##(%d) Solicitó syscall: STDOUT", pcb_upd->pid);
                 log_info(logger, "##(%d) Pasa del estado EXEC al estado BLOCK", pcb_upd->pid); // Como toda operación de I/O es lenta, el proceso no puede seguir en la CPU. Se lo mueve de EXEC a BLOCK.
                 pthread_mutex_lock(&m_block);                                                  // Protege la cola de bloqueados
@@ -452,8 +452,8 @@ void *atender_cliente(void *arg)
             {
                 int id_segmento;
                 int tam_segmento;
-                recv(fd_cpu, &id_segmento, sizeof(int), MSG_WAITALL);
-                recv(fd_cpu, &tam_segmento, sizeof(int), MSG_WAITALL);
+                recv(socket_cliente, &id_segmento, sizeof(int), MSG_WAITALL);
+                recv(socket_cliente, &tam_segmento, sizeof(int), MSG_WAITALL);
 
                 log_info(logger, "## (%d) Solicitó syscall: MEM_ALLOC - ID: %d - Tam: %d", pcb_upd->pid, id_segmento, tam_segmento);
 
@@ -493,14 +493,14 @@ void *atender_cliente(void *arg)
                 }
 
                 // 5. El proceso vuelve a CPU directo
-                 enviar_pcb(pcb_upd, fd_cpu, CONTEXTO_PCB);
+                 enviar_pcb(pcb_upd, socket_cliente, CONTEXTO_PCB);
                 break;
             }
 
             case SYSCALL_MEM_FREE:
             {
                 int id_segmento;
-                recv(fd_cpu, &id_segmento, sizeof(int), MSG_WAITALL);
+                recv(socket_cliente, &id_segmento, sizeof(int), MSG_WAITALL);
 
                 log_info(logger, "## (%d) Solicitó syscall: MEM_FREE - ID: %d", pcb_upd->pid, id_segmento);
 
@@ -527,7 +527,7 @@ void *atender_cliente(void *arg)
                 }
 
                 // 4. El proceso vuelve a CPU directo
-                 enviar_pcb(pcb_upd, fd_cpu, CONTEXTO_PCB);
+                 enviar_pcb(pcb_upd, socket_cliente, CONTEXTO_PCB);
                 intentar_desuspender();
                  break;
             }
