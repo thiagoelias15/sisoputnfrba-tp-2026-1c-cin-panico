@@ -159,7 +159,7 @@ void mover_a_ready(int pid_buscado) { //La función entra a la "sala de espera" 
        // Preemption: buscar si hay un proceso menos prioritario ejecutando
         if(kernel_config.queue_preemption == 1) {
             pthread_mutex_lock(&m_cpus_sched);
-            int peor_prio = -1;
+           
            
             pthread_mutex_unlock(&m_cpus_sched);
 

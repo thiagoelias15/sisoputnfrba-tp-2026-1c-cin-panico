@@ -108,7 +108,7 @@ void *atender_cliente(void *arg)
         pthread_mutex_lock(&m_cpus_sched);
         list_add(lista_cpus_sched, cpu_nueva);
         pthread_mutex_unlock(&m_cpus_sched);
-        log_info(logger, "## CPU <ID CPU> conectada",socket_cliente);
+        log_info(logger, "## CPU conectada - FD: %d",socket_cliente);
 
         while (scheduler_corriendo)
         {

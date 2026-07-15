@@ -19,7 +19,7 @@ sem_t sem_procesos_ready;
 t_dictionary* dic_mutex;
 t_dictionary* dic_interfaces;
 
-t_list* lista_cpu_sched;
+t_list* lista_cpus_sched;
 pthread_mutex_t m_cpus_sched;
 int fd_memoria = -1;
 t_log* logger;
