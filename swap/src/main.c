@@ -61,7 +61,9 @@ int main(int argc, char* argv[]) {
             // fseek: movemos el cursor del archivo a la posicion exacta del bloque
             //(Nro bloque * tamaño del bloque)
             fseek(archivo_swap, num_bloque * swap_config.block_size, SEEK_SET );
-            fread(buffer, swap_config.block_size, 1, archivo_swap);
+            if(fread(buffer, swap_config.block_size, 1, archivo_swap) != -1){
+                log_warning(logger, "Lectura incompleta del bloque");
+            }
             // enviamos los bytes leidos de vuelta al Kernel Memory
             send(socket_memoria, buffer, swap_config.block_size, 0);
             log_info(logger, "## Lectura del bloque: %d", num_bloque);
