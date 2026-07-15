@@ -160,19 +160,7 @@ void mover_a_ready(int pid_buscado) { //La función entra a la "sala de espera" 
         if(kernel_config.queue_preemption == 1) {
             pthread_mutex_lock(&m_cpus_sched);
             int peor_prio = -1;
-            int fd_a_desalojar = -1;
-            int pid_a_desalojar = -1;
-            for(int i = 0; i < list_size(lista_cpus_sched); i++) {
-                t_cpu_info* ci = list_get(lista_cpus_sched, i);
-                if(ci->pid_ejecutando != -1) {
-                    // Buscamos el ejecutando con peor prioridad (número más alto)
-                    // que sea peor que el nuevo proceso
-                    if(ci->pid_ejecutando > peor_prio) {
-                        // Necesitamos la prioridad del PCB, no el PID
-                        // Pero no tenemos el PCB acá. Usamos pcb_en_ejecucion como aproximación
-                    }
-                }
-            }
+           
             pthread_mutex_unlock(&m_cpus_sched);
 
             // Simplificación: con 1 CPU pcb_en_ejecucion sigue funcionando

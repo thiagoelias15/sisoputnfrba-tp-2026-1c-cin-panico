@@ -35,7 +35,7 @@ extern t_dictionary* dic_interfaces;
 
 typedef struct {
     int fd_cpu;
-    int pid_ejcutando;
+    int pid_ejecutando;
 } t_cpu_info;
 extern t_list* lista_cpus_sched;
 extern pthread_mutex_t m_cpus_sched;
