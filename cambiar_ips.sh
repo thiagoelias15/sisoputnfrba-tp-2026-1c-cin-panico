@@ -1,5 +1,5 @@
 #!/bin/bash
-BASE=~/tp-2026-1c-cin-panico
+BASE=~/so-deploy/tp-2026-1c-cin-panico
 
 IP_MEM=$1
 IP_SCHED=$2
