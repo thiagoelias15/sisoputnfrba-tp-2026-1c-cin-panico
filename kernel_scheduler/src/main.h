@@ -37,7 +37,7 @@ typedef struct {
     int fd_cpu;
     int pid_ejcutando;
 } t_cpu_info;
-extern t_lista_cpus_sched;
+extern t_list* lista_cpus_sched;
 extern pthread_mutex_t m_cpus_sched;
 extern int fd_memoria;
 
