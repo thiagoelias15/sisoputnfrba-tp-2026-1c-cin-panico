@@ -2,6 +2,57 @@
 #include <stdbool.h>
 extern t_pcb *pcb_en_ejecucion;
 
+void reintentar_esperando_memoria() {
+    pthread_mutex_lock(&m_esperando_memoria);
+
+    for(int i = 0; i < list_size(cola_esperando_memoria); i++) {
+        t_pcb* pcb = list_get(cola_esperando_memoria, i);
+
+        pthread_mutex_lock(&m_fd_memoria);
+        op_code op = SYSCALL_MEM_ALLOC;
+        send(fd_memoria, &op, sizeof(op_code), 0);
+        send(fd_memoria, &(pcb->pid), sizeof(uint32_t), 0);
+        send(fd_memoria, &(pcb->mem_pendiente_id), sizeof(int), 0);
+        send(fd_memoria, &(pcb->mem_pendiente_tam), sizeof(int), 0);
+
+        int primer_respuesta;
+        recv(fd_memoria, &primer_respuesta, sizeof(int), MSG_WAITALL);
+        if(primer_respuesta == -1){
+            int ok = 1;
+            send(fd_memoria, &ok, sizeof(int), 0);
+            int fin_compactacion;
+            recv(fd_memoria, &fin_compactacion, sizeof(int), MSG_WAITALL);
+        }
+        uint32_t direccion_base;
+        recv(fd_memoria, &direccion_base, sizeof(uint32_t), MSG_WAITALL);
+        pthread_mutex_unlock(&m_fd_memoria);
+
+        if(direccion_base != 999999) {
+            t_segmento* nuevo = malloc(sizeof(t_segmento));
+            nuevo->id = pcb->mem_pendiente_id;
+            nuevo->tamanio = (uint32_t)pcb->mem_pendiente_tam;
+            nuevo->direccion_base = direccion_base;
+            list_add(pcb->tabla_segmentos, nuevo);
+
+            list_remove(cola_esperando_memoria, i);
+            i--;
+
+            log_info(logger, "## (%d) Consiguió memoria - Vuelve a READY", pcb->pid);
+            pcb->estado = READY;
+            int prio = 0;
+            if(strcmp(kernel_config.algoritmo_planificacion, "CMN") == 0) {
+                prio = pcb->prioridad;
+            }
+            pthread_mutex_lock(&m_ready);
+            list_add(colas_ready[prio], pcb);
+            pthread_mutex_unlock(&m_ready);
+            sem_post(&sem_procesos_ready);
+        }
+    }
+
+    pthread_mutex_unlock(&m_esperando_memoria);
+}
+
 bool comparar_prioridades(void *pcb1, void *pcb2)
 {
     t_pcb *p1 = (t_pcb *)pcb1;
@@ -151,6 +202,7 @@ void *atender_cliente(void *arg)
                 list_add(cola_exit, pcb_upd);
                 sem_post(&sem_procesos_ready); // La CPU queda libre
                 intentar_desuspender(); // Intentamos desuspender procesos si es posible
+                reintentar_esperando_memoria();
                 break;
             }
 
@@ -173,6 +225,7 @@ void *atender_cliente(void *arg)
                 // Liberamos la CPU
                 sem_post(&sem_procesos_ready);
                 intentar_desuspender();
+                reintentar_esperando_memoria();
                 break;
             }
 
@@ -297,7 +350,7 @@ void *atender_cliente(void *arg)
                     queue_push(mutex_actual->bloqueados, pcb_upd);
 
                     // Herencia de prioridades
-                    if (pcb_upd->prioridad < mutex_actual->owner->prioridad)
+                  if (pcb_upd->prioridad < mutex_actual->owner->prioridad)
                     {
                         int owner_pid = mutex_actual->owner->pid;
                         int nueva_prio = pcb_upd->prioridad;
@@ -305,7 +358,7 @@ void *atender_cliente(void *arg)
                         log_info(logger, "## (%d) hereda prioridad %d a (%d)", pcb_upd->pid, nueva_prio, owner_pid);
                         mutex_actual->owner->prioridad = nueva_prio;
 
-                        // También actualizar el PCB real en cola_block
+                        // Actualizar en cola_block
                         pthread_mutex_lock(&m_block);
                         for(int i = 0; i < list_size(cola_block); i++) {
                             t_pcb* p = list_get(cola_block, i);
@@ -316,13 +369,26 @@ void *atender_cliente(void *arg)
                         }
                         pthread_mutex_unlock(&m_block);
 
+                        // Actualizar si está ejecutando
+                        if(pcb_en_ejecucion != NULL && pcb_en_ejecucion->pid == owner_pid) {
+                            pcb_en_ejecucion->prioridad = nueva_prio;
+                        }
+
+                        // Actualizar en colas_ready y moverlo a la cola correcta
                         pthread_mutex_lock(&m_ready);
-                        for (int i = 0; i < cantidad_colas; i++)
-                        {
-                            if (colas_ready[i] != NULL && !list_is_empty(colas_ready[i]))
-                            {
-                                list_sort(colas_ready[i], comparar_prioridades);
+                        for(int q = 0; q < cantidad_colas; q++) {
+                            int encontrado = 0;
+                            for(int j = 0; j < list_size(colas_ready[q]); j++) {
+                                t_pcb* p = list_get(colas_ready[q], j);
+                                if(p->pid == owner_pid) {
+                                    p->prioridad = nueva_prio;
+                                    list_remove(colas_ready[q], j);
+                                    list_add(colas_ready[nueva_prio], p);
+                                    encontrado = 1;
+                                    break;
+                                }
                             }
+                            if(encontrado) break;
                         }
                         pthread_mutex_unlock(&m_ready);
                     }
@@ -528,25 +594,31 @@ void *atender_cliente(void *arg)
                 recv(fd_memoria, &direccion_base, sizeof(uint32_t), MSG_WAITALL);
                  pthread_mutex_unlock(&m_fd_memoria);
                 // 3. Creamos la estructura del segmento
-                if(direccion_base == 999999) {
-                    log_error(logger, "## (%d) MEM_ALLOC falló - Out of Memory", pcb_upd->pid);
+             if(direccion_base == 999999) {
+                    log_info(logger, "## (%d) MEM_ALLOC sin espacio - Proceso esperando memoria", pcb_upd->pid);
+                    pcb_upd->mem_pendiente_id = id_segmento;
+                    pcb_upd->mem_pendiente_tam = tam_segmento;
+
+                    pthread_mutex_lock(&m_esperando_memoria);
+                    list_add(cola_esperando_memoria, pcb_upd);
+                    pthread_mutex_unlock(&m_esperando_memoria);
                 } else {
                     t_segmento *nuevo_segmento = malloc(sizeof(t_segmento));
                     nuevo_segmento->id = id_segmento;
                     nuevo_segmento->tamanio = (uint32_t)tam_segmento;
                     nuevo_segmento->direccion_base = direccion_base;
                     list_add(pcb_upd->tabla_segmentos, nuevo_segmento);
+
+                    pcb_upd->estado = READY;
+                    int prio_alloc = 0;
+                    if (strcmp(kernel_config.algoritmo_planificacion, "CMN") == 0) {
+                        prio_alloc = pcb_upd->prioridad;
+                    }
+                    pthread_mutex_lock(&m_ready);
+                    list_add(colas_ready[prio_alloc], pcb_upd);
+                    pthread_mutex_unlock(&m_ready);
+                    sem_post(&sem_procesos_ready);
                 }
-// El proceso vuelve a READY, el planificador lo despacha
-                pcb_upd->estado = READY;
-                int prio_alloc = 0;
-                if (strcmp(kernel_config.algoritmo_planificacion, "CMN") == 0) {
-                    prio_alloc = pcb_upd->prioridad;
-                }
-                pthread_mutex_lock(&m_ready);
-                list_add(colas_ready[prio_alloc], pcb_upd);
-                pthread_mutex_unlock(&m_ready);
-                sem_post(&sem_procesos_ready);
                 break;
             }
 
@@ -660,6 +732,7 @@ if (cod_op == MENSAJE)
                         }
                         pthread_mutex_unlock(&m_susp);
                     intentar_desuspender();
+                    reintentar_esperando_memoria();
                     }
                 }
 
@@ -722,6 +795,7 @@ if (cod_op == MENSAJE)
                     }
                     pthread_mutex_unlock(&m_susp);
                     intentar_desuspender();
+                    reintentar_esperando_memoria();
                 }
             }
         }

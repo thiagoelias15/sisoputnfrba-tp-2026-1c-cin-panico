@@ -26,7 +26,8 @@ t_log* logger;
 int scheduler_corriendo = 1;
 t_list* cola_esperando_memoria;
 pthread_mutex_t m_esperando_memoria;
-
+t_list* cola_esperando_memoria;
+pthread_mutex_t m_esperando_memoria;
 
 
 int main(int argc,char* argv[]) {

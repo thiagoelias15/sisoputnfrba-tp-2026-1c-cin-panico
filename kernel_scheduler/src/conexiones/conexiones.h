@@ -5,5 +5,5 @@
 #include "../planificador/planificador.h" // Para poder llamar a mover_a_ready()
 
 void* atender_cliente(void* arg);
-
+void reintentar_esperando_memoria();
 #endif
