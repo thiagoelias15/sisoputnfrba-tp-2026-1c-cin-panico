@@ -55,11 +55,8 @@ void* planificador_corto_plazo(void* arg) {
         sem_wait(&sem_cpu_libre);
          int fd_cpu_actual = obtener_cpu_libre();
         if (fd_cpu_actual == -1) {
-            log_warning(logger, "Esperando conexión de CPU...");
-            sem_post(&sem_cpu_libre);
-            sem_post(&sem_procesos_ready); // Volvemos a poner el semáforo para no trabarnos
-            usleep(500000); // Esperamos medio segundo
-            continue;
+            sem_post(&sem_procesos_ready); // devolvemos el proceso a la cola
+            continue; // sem_wait(sem_cpu_libre) en la próxima iteración bloqueará naturalmente
         }
         t_pcb* pcb_a_ejecutar = NULL;
 
@@ -81,7 +78,7 @@ void* planificador_corto_plazo(void* arg) {
             log_info(logger, "## (%d) Pasa del estado READY al estado EXEC", pcb_a_ejecutar->pid);
 
             enviar_pcb(pcb_a_ejecutar, fd_cpu_actual, CONTEXTO_PCB);
-            
+            marcar_cpu_ocupada(fd_cpu_actual, pcb_a_ejecutar->pid);
            // Evaluamos si corresponde lanzar el temporizador de Round Robin
             int usa_rr = 0; // Por defecto es 0 (Falso)
             
@@ -124,47 +121,54 @@ void* temporizador_quantum(void* arg) {
 
 //--------------------------------- Auxiliares de planificacion---------------------------/
 
-void mover_a_ready(int pid_buscado) { //La función entra a la "sala de espera" de procesos bloqueados (cola_block)
+void mover_a_ready(int pid_buscado) {
     t_pcb* pcb_a_mover = NULL;
 
-    //bloqueamos la cola BLOCK para evitar "choques" o que entren nuevos hilos a la cola
     pthread_mutex_lock(&m_block);
-
-    for(int i = 0; i< list_size(cola_block);i++) { // va a recorrer la lista buscando el PID que necesitamos
-        
-        t_pcb* p= list_get(cola_block,i); //obtenemos el PCB en la posicion i
+    for(int i = 0; i < list_size(cola_block); i++) {
+        t_pcb* p = list_get(cola_block, i);
         if(p->pid == pid_buscado) {
-
-            //si coincide el PID, lo extraemos de la lista de bloqueados
-            pcb_a_mover = list_remove(cola_block,i);
+            pcb_a_mover = list_remove(cola_block, i);
             break;
         }
     }
-
     pthread_mutex_unlock(&m_block);
 
-    if(pcb_a_mover != NULL) { //si encontro el proceso lo mete en la cola de listos
-        
-        pcb_a_mover->estado = READY; //actualizamods el estado interno del PCB
-        //metemos a la cola de READY especifica de su prioridad
+    if(pcb_a_mover != NULL) {
+        pcb_a_mover->estado = READY;
+
+        // Recalcular prioridad heredada: si este proceso es dueño de algún
+        // mutex con procesos esperando, hereda la prioridad más alta de ellos
+        int prio_heredada = pcb_a_mover->prioridad_original;
+       t_list* claves = dictionary_keys(dic_mutex);
+        for(int k = 0; k < list_size(claves); k++) {
+            char* clave = list_get(claves, k);
+            t_mutex* mtx = dictionary_get(dic_mutex, clave);
+            if(mtx->owner != NULL && mtx->owner->pid == pid_buscado) {
+                // Este proceso es dueño de este mutex; revisamos quién espera
+                t_list* esperando = mtx->bloqueados->elements;
+                for(int e = 0; e < list_size(esperando); e++) {
+                    t_pcb* esperador = list_get(esperando, e);
+                    if(esperador->prioridad < prio_heredada) {
+                        prio_heredada = esperador->prioridad;
+                    }
+                }
+            }
+        }
+        list_destroy(claves);
+        pcb_a_mover->prioridad = prio_heredada;
+
         int prio;
         if(strcmp(kernel_config.algoritmo_planificacion, "CMN") == 0) {
             prio = pcb_a_mover->prioridad;
         } else {
-            prio = 0; // Para FIFO y RR ignoramos la prioridad, todos van a la cola 0
+            prio = 0;
         }
         pthread_mutex_lock(&m_ready);
         list_add(colas_ready[prio], pcb_a_mover);
         pthread_mutex_unlock(&m_ready);
-       // Preemption: buscar si hay un proceso menos prioritario ejecutando
-        if(kernel_config.queue_preemption == 1) {
-            pthread_mutex_lock(&m_cpus_sched);
-           
-           
-            pthread_mutex_unlock(&m_cpus_sched);
 
-            // Simplificación: con 1 CPU pcb_en_ejecucion sigue funcionando
-            // Con múltiples CPUs buscamos al que tenga peor prioridad
+        if(kernel_config.queue_preemption == 1) {
             if(pcb_en_ejecucion != NULL &&
                pcb_a_mover->prioridad < pcb_en_ejecucion->prioridad) {
                 int fd_desalojo = buscar_fd_por_pid(pcb_en_ejecucion->pid);

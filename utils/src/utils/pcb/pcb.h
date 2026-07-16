@@ -40,6 +40,8 @@ typedef struct {
     int prioridad;  // la prioridad actual con la que compite en READY
     int prioridad_original; //  la prioridad base para restaurarlo despues de soltar el Mutex
     t_list* tabla_segmentos;
+    int mem_pendiente_id;
+    int mem_pendiente_tam;
 } t_pcb;
 #pragma pack (pop)
 

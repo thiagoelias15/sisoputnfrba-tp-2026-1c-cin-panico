@@ -51,45 +51,29 @@ void ejecutar_stdin(int fd_scheduler)
     log_info(logger, "## PID: %d Inicio de IO", pid);
 
     //  Log Obligatorio específico para STDIN
-    log_info(logger, "## PID: %d Ingrese %d caracteres:", pid, tam);
-
-    // readline frena el programa y espera a que el usuario escriba y apriete Enter.
-    char *leido = readline("> ");
-
+    int cant_numeros = tam / sizeof(int);
+    log_info(logger, "## PID: %d Ingrese %d numero/s:", pid, cant_numeros);
     // calloc reserva la memoria y la llena automáticamente de '\0' (barra cero).
     // Así nos ahorramos tener que rellenar a mano con un bucle if/for si el usuario escribe de menos.
-    char *buffer_a_devolver = calloc(tam, sizeof(char));
-
+    void *buffer_a_devolver = calloc(tam, 1);
+    for(int i = 0; i < cant_numeros; i++) {
+    char* leido = readline (">");
     if (leido != NULL)
     {
-        int longitud_leida = strlen(leido);
-
-        // [Lógica de truncado o copia directa
-        if (longitud_leida > tam)
-        {
-            // Si escribió de más, truncamos copiando exactamente 'tam' bytes.
-            memcpy(buffer_a_devolver, leido, tam);
+         int numero = atoi(leido);  // convertimos el texto a entero
+            memcpy(buffer_a_devolver + (i * sizeof(int)), &numero, sizeof(int));
+            free(leido);
         }
-        else
-        {
-            // Si escribió de menos (o lo justo), copiamos lo que escribió.
-            // El resto del buffer_a_devolver ya quedó en '\0' gracias al calloc.
-            memcpy(buffer_a_devolver, leido, longitud_leida);
-        }
-        free(leido); // Liberamos la lectura temporal de readline
     }
 
-   // Le devolvemos el paquete al Scheduler avisándole que es una respuesta de STDIN
     op_code op_respuesta = SYSCALL_STDIN;
     send(fd_scheduler, &op_respuesta, sizeof(op_code), 0);
     send(fd_scheduler, &pid, sizeof(int), 0);
-    send(fd_scheduler, &dir, sizeof(int), 0); // Le devolvemos la dir que nos había prestado
+    send(fd_scheduler, &dir, sizeof(int), 0);
     send(fd_scheduler, &tam, sizeof(int), 0);
-    send(fd_scheduler, buffer_a_devolver, tam, 0); // Mandamos los bytes crudos
+    send(fd_scheduler, buffer_a_devolver, tam, 0);
 
-    // 2° Log Obligatorio exigido por el TP
     log_info(logger, "## PID: %d - Fin de IO", pid);
-
     free(buffer_a_devolver);
 }
 

@@ -6,6 +6,8 @@ void inicializar_estructuras(void) {
     cola_esperando_memoria = list_create();
     pthread_mutex_init(&m_esperando_memoria, NULL);
     pthread_mutex_init(&m_fd_memoria, NULL);
+    cola_esperando_memoria = list_create();
+    pthread_mutex_init(&m_esperando_memoria, NULL);
     // Si es Colas Multinivel, contamos cuántas pide el array
     if(strcmp(kernel_config.algoritmo_planificacion, "CMN") == 0) {
         cantidad_colas = 0;
@@ -22,7 +24,7 @@ void inicializar_estructuras(void) {
     for(int i = 0; i < cantidad_colas; i++) {
         colas_ready[i] = list_create();
     }
-    sem_init(&sem_cpu_libre, 0 ,1);
+    sem_init(&sem_cpu_libre, 0 ,0);
     cola_exec = list_create();
     cola_block = list_create();
     cola_exit = list_create();
