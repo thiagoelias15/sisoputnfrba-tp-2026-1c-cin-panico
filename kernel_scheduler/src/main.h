@@ -27,7 +27,7 @@ extern t_list* cola_exit;
 extern t_list* cola_susp_block;
 extern t_list* cola_susp_ready;
 extern pthread_mutex_t m_susp;
-
+extern int pending_wakeup[1000];
 extern pthread_mutex_t m_ready, m_new, m_block, m_exit;
 extern sem_t sem_procesos_ready;
 extern t_dictionary* dic_mutex;
@@ -36,7 +36,7 @@ extern t_list* cola_esperando_memoria;
 extern pthread_mutex_t m_esperando_memoria;
 extern t_list* cola_esperando_memoria;
 extern pthread_mutex_t m_esperando_memoria;
-
+extern int block_epoch[1000]; // epoch por PID para invalidar timers viejos
 typedef struct {
     int fd_cpu;
     int pid_ejecutando;

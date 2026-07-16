@@ -1,7 +1,8 @@
 #include "main.h"
 #include "conexiones/conexiones.h"
 #include "planificador/planificador.h"
-
+int block_epoch[1000] = {0};
+int pending_wakeup[1000] = {0};
 int PID_GLOBAL = 0;
 sem_t sem_cpu_libre;
 // Definición de variables globales(en el main.h con extern solo le avisabamos al compiladro que existian pero no estaban definidas)
