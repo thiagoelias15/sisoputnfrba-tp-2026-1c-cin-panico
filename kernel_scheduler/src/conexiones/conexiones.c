@@ -395,6 +395,7 @@ void *atender_cliente(void *arg)
                 char *texto_de_memoria = calloc(tam + 1, sizeof(char)); // +1 para el '\0'
                 recv(fd_memoria, texto_de_memoria, tam, MSG_WAITALL);
                  pthread_mutex_unlock(&m_fd_memoria);
+                
                 /*Si hay una interfaz conectada , el Kernel le envía un mensaje avisando que hay una tarea de STDOUT.
                 Le pasa el tamaño, la dirección y el PID del proceso para que la interfaz sepa a quién pertenece la operación*/
 
