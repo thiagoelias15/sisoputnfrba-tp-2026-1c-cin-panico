@@ -81,8 +81,11 @@ void ejecutar_instrucciones(char** tokens, t_pcb* pcb, int* desalojar, op_code* 
     char* comando = tokens[0];
     // Instrucciones matematicas y de registro
     if(strcmp(comando, "SET") == 0) {
-        setear_valor_registro(pcb, tokens[1], atoi(tokens[2]));
-    } 
+         setear_valor_registro(pcb, tokens[1], atoi(tokens[2]));
+        if(strcmp(tokens[1], "PC") == 0) {
+            *modifico_pc = 1;
+        }
+    }
     else if(strcmp(comando, "SUM") == 0) {
         uint32_t dest = obtener_valor_registro(pcb, tokens[1]);
         uint32_t orig = obtener_valor_registro(pcb, tokens[2]);

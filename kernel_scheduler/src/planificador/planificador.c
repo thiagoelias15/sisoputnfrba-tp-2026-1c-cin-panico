@@ -55,11 +55,8 @@ void* planificador_corto_plazo(void* arg) {
         sem_wait(&sem_cpu_libre);
          int fd_cpu_actual = obtener_cpu_libre();
         if (fd_cpu_actual == -1) {
-            log_warning(logger, "Esperando conexión de CPU...");
-            sem_post(&sem_cpu_libre);
-            sem_post(&sem_procesos_ready); // Volvemos a poner el semáforo para no trabarnos
-            usleep(500000); // Esperamos medio segundo
-            continue;
+            sem_post(&sem_procesos_ready); // devolvemos el proceso a la cola
+            continue; // sem_wait(sem_cpu_libre) en la próxima iteración bloqueará naturalmente
         }
         t_pcb* pcb_a_ejecutar = NULL;
 
@@ -81,7 +78,7 @@ void* planificador_corto_plazo(void* arg) {
             log_info(logger, "## (%d) Pasa del estado READY al estado EXEC", pcb_a_ejecutar->pid);
 
             enviar_pcb(pcb_a_ejecutar, fd_cpu_actual, CONTEXTO_PCB);
-            
+            marcar_cpu_ocupada(fd_cpu_actual, pcb_a_ejecutar->pid);
            // Evaluamos si corresponde lanzar el temporizador de Round Robin
             int usa_rr = 0; // Por defecto es 0 (Falso)
             

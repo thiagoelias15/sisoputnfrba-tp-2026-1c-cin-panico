@@ -108,6 +108,7 @@ void *atender_cliente(void *arg)
         cpu_nueva->pid_ejecutando = -1;
         pthread_mutex_lock(&m_cpus_sched);
         list_add(lista_cpus_sched, cpu_nueva);
+        sem_post(&sem_cpu_libre);
         pthread_mutex_unlock(&m_cpus_sched);
         log_info(logger, "## CPU conectada - FD: %d",socket_cliente);
 
@@ -242,7 +243,17 @@ void *atender_cliente(void *arg)
 
                     dictionary_put(dic_mutex, m_name, nuevo_mutex);
                 }
-                enviar_pcb(pcb_upd, socket_cliente, CONTEXTO_PCB);
+                 // El proceso vuelve a READY
+                pcb_upd->estado = READY;
+                int prio_create = 0;
+                if(strcmp(kernel_config.algoritmo_planificacion, "CMN") == 0) {
+                    prio_create = pcb_upd->prioridad;
+                }
+                pthread_mutex_lock(&m_ready);
+                list_add(colas_ready[prio_create], pcb_upd);
+                pthread_mutex_unlock(&m_ready);
+                sem_post(&sem_procesos_ready);
+
                 free(m_name);
                 break;
             }
@@ -258,7 +269,15 @@ void *atender_cliente(void *arg)
                     // Si el mutex está libre
                     log_info(logger, "## (%d) Toma el mutex %s", pcb_upd->pid, m_name);
                     mutex_actual->owner = pcb_upd;
-                    enviar_pcb(pcb_upd, socket_cliente, CONTEXTO_PCB);
+                    pcb_upd -> estado = READY;
+                    int prio_mutex = 0;
+                    if(strcmp(kernel_config.algoritmo_planificacion,"CMN")== 0){
+                        prio_mutex = pcb_upd -> prioridad;
+                    }
+                    pthread_mutex_lock(&m_ready);
+                    list_add(colas_ready[prio_mutex], pcb_upd);
+                    pthread_mutex_unlock(&m_ready);
+                    sem_post(&sem_procesos_ready);
                 }
                 else
                 {
@@ -280,10 +299,22 @@ void *atender_cliente(void *arg)
                     // Herencia de prioridades
                     if (pcb_upd->prioridad < mutex_actual->owner->prioridad)
                     {
-                        log_info(logger, "## (%d) hereda prioridad %d a (%d)", pcb_upd->pid, pcb_upd->prioridad, mutex_actual->owner->pid);
+                        int owner_pid = mutex_actual->owner->pid;
+                        int nueva_prio = pcb_upd->prioridad;
 
-                        // Cambiamos la prioridad del dueño
-                        mutex_actual->owner->prioridad = pcb_upd->prioridad;
+                        log_info(logger, "## (%d) hereda prioridad %d a (%d)", pcb_upd->pid, nueva_prio, owner_pid);
+                        mutex_actual->owner->prioridad = nueva_prio;
+
+                        // También actualizar el PCB real en cola_block
+                        pthread_mutex_lock(&m_block);
+                        for(int i = 0; i < list_size(cola_block); i++) {
+                            t_pcb* p = list_get(cola_block, i);
+                            if(p->pid == owner_pid) {
+                                p->prioridad = nueva_prio;
+                                break;
+                            }
+                        }
+                        pthread_mutex_unlock(&m_block);
 
                         pthread_mutex_lock(&m_ready);
                         for (int i = 0; i < cantidad_colas; i++)
@@ -322,7 +353,17 @@ void *atender_cliente(void *arg)
                 {
                     mutex_actual->owner = NULL; // Nadie lo estaba esperando, queda libre
                 }
-                enviar_pcb(pcb_upd, socket_cliente, CONTEXTO_PCB); // el proceso que solto el mutex vuelve a CPU para ejectuar la instruccion que sigue
+                // El proceso que soltó el mutex vuelve a READY
+                pcb_upd->estado = READY;
+                int prio_unlock = 0;
+                if(strcmp(kernel_config.algoritmo_planificacion, "CMN") == 0) {
+                    prio_unlock = pcb_upd->prioridad;
+                }
+                pthread_mutex_lock(&m_ready);
+                list_add(colas_ready[prio_unlock], pcb_upd);
+                pthread_mutex_unlock(&m_ready);
+                sem_post(&sem_procesos_ready);
+
                 free(m_name);
                 break;
             }
