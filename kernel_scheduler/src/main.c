@@ -18,12 +18,16 @@ pthread_mutex_t m_ready, m_new, m_block, m_exit;
 sem_t sem_procesos_ready;
 t_dictionary* dic_mutex;
 t_dictionary* dic_interfaces;
-
+pthread_mutex_t m_fd_memoria;
 t_list* lista_cpus_sched;
 pthread_mutex_t m_cpus_sched;
 int fd_memoria = -1;
 t_log* logger;
 int scheduler_corriendo = 1;
+t_list* cola_esperando_memoria;
+pthread_mutex_t m_esperando_memoria;
+
+
 
 int main(int argc,char* argv[]) {
     // Se verifica la información en el config

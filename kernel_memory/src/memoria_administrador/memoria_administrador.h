@@ -45,7 +45,7 @@ t_segmento_memoria* buscar_hueco_best_fit(uint32_t tamanio_necesario);
 t_segmento_memoria* buscar_hueco_worst_fit(uint32_t tamanio_necesario);
 
 // Función principal para asignar espacio a un proceso
-int asignar_memoria(int pid, uint32_t tamanio);
+uint32_t asignar_memoria(int pid, uint32_t tamanio, int id_segmento);
 void liberar_memoria(int pid, int id_segmento);
 void compactar_memoria();
 void leer_de_sticks(uint32_t dir_global, void* buffer, uint32_t tamanio);
@@ -55,6 +55,7 @@ extern int fd_scheduler_global;
 extern int fd_swap;
 extern int swap_block_size;
 extern int swap_file_size;
+extern pthread_mutex_t m_swap_socket;
 #endif
 
 

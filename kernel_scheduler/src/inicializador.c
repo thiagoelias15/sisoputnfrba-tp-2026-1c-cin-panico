@@ -3,7 +3,9 @@
 extern int PID_GLOBAL;
 void inicializar_estructuras(void) {
     cola_new = list_create();
-    
+    cola_esperando_memoria = list_create();
+    pthread_mutex_init(&m_esperando_memoria, NULL);
+    pthread_mutex_init(&m_fd_memoria, NULL);
     // Si es Colas Multinivel, contamos cuántas pide el array
     if(strcmp(kernel_config.algoritmo_planificacion, "CMN") == 0) {
         cantidad_colas = 0;
