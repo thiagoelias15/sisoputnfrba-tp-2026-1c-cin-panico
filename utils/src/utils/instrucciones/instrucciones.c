@@ -17,6 +17,7 @@ void setear_valor_registro(t_pcb* pcb, char* reg, uint32_t valor) {
     else if(strcmp(reg, "EDX") == 0) pcb->edx = valor;
     else if(strcmp(reg, "SI") == 0) pcb->si = valor;
     else if(strcmp(reg, "DI") == 0) pcb->di = valor;
+    else if(strcmp(reg, "PC") == 0) pcb->pc = valor;
 }
 /*Hace exactamente lo inverso a la función anterior. Compara el texto (ej: "BX"), busca la 
  variable física correspondiente en nuestro struct (pcb->bx), y nos devuelve el número 
@@ -33,6 +34,7 @@ uint32_t obtener_valor_registro(t_pcb* pcb, char* reg) {
     if(strcmp(reg, "EDX") == 0) return pcb->edx;
     if(strcmp(reg, "SI") == 0) return pcb->si;
     if(strcmp(reg, "DI") == 0) return pcb->di;
+    if(strcmp(reg, "PC") == 0) return pcb->pc;
     return 0;
 }
 
