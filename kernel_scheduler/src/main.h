@@ -32,6 +32,8 @@ extern pthread_mutex_t m_ready, m_new, m_block, m_exit;
 extern sem_t sem_procesos_ready;
 extern t_dictionary* dic_mutex;
 extern t_dictionary* dic_interfaces;
+extern t_list* cola_esperando_memoria;
+extern pthread_mutex_t m_esperando_memoria;
 
 typedef struct {
     int fd_cpu;
