@@ -120,66 +120,77 @@ void* temporizador_quantum(void* arg) {
 }
 
 //--------------------------------- Auxiliares de planificacion---------------------------/
-
-void mover_a_ready(int pid_buscado) {
-    t_pcb* pcb_a_mover = NULL;
-
+// Saca un pid de cola_block de forma atómica y lo devuelve (NULL si no estaba).
+// Resuelve la carrera entre FIN_IO/STDIN y timer_suspension: solo UNO logra
+// removerlo, por lo que solo uno lo gestiona.
+t_pcb* sacar_de_block(int pid_buscado) {
+    t_pcb* encontrado = NULL;
     pthread_mutex_lock(&m_block);
     for(int i = 0; i < list_size(cola_block); i++) {
         t_pcb* p = list_get(cola_block, i);
         if(p->pid == pid_buscado) {
-            pcb_a_mover = list_remove(cola_block, i);
+            encontrado = list_remove(cola_block, i);
             break;
         }
     }
     pthread_mutex_unlock(&m_block);
+    return encontrado;
+}
 
-    if(pcb_a_mover != NULL) {
-        pcb_a_mover->estado = READY;
+// Encola en READY un PCB YA removido de cola_block (o de donde estuviera).
+// Incluye el recálculo de prioridad heredada y el desalojo por preemption.
+void encolar_en_ready(t_pcb* pcb_a_mover) {
+    if(pcb_a_mover == NULL) return;
 
-        // Recalcular prioridad heredada: si este proceso es dueño de algún
-        // mutex con procesos esperando, hereda la prioridad más alta de ellos
-        int prio_heredada = pcb_a_mover->prioridad_original;
-       t_list* claves = dictionary_keys(dic_mutex);
-        for(int k = 0; k < list_size(claves); k++) {
-            char* clave = list_get(claves, k);
-            t_mutex* mtx = dictionary_get(dic_mutex, clave);
-            if(mtx->owner != NULL && mtx->owner->pid == pid_buscado) {
-                // Este proceso es dueño de este mutex; revisamos quién espera
-                t_list* esperando = mtx->bloqueados->elements;
-                for(int e = 0; e < list_size(esperando); e++) {
-                    t_pcb* esperador = list_get(esperando, e);
-                    if(esperador->prioridad < prio_heredada) {
-                        prio_heredada = esperador->prioridad;
-                    }
+    pcb_a_mover->estado = READY;
+
+    // Recalcular prioridad heredada: si este proceso es dueño de algún
+    // mutex con procesos esperando, hereda la prioridad más alta de ellos
+    int prio_heredada = pcb_a_mover->prioridad_original;
+    t_list* claves = dictionary_keys(dic_mutex);
+    for(int k = 0; k < list_size(claves); k++) {
+        char* clave = list_get(claves, k);
+        t_mutex* mtx = dictionary_get(dic_mutex, clave);
+        if(mtx->owner != NULL && mtx->owner->pid == pcb_a_mover->pid) {
+            // Este proceso es dueño de este mutex; revisamos quién espera
+            t_list* esperando = mtx->bloqueados->elements;
+            for(int e = 0; e < list_size(esperando); e++) {
+                t_pcb* esperador = list_get(esperando, e);
+                if(esperador->prioridad < prio_heredada) {
+                    prio_heredada = esperador->prioridad;
                 }
             }
         }
-        list_destroy(claves);
-        pcb_a_mover->prioridad = prio_heredada;
-
-        int prio;
-        if(strcmp(kernel_config.algoritmo_planificacion, "CMN") == 0) {
-            prio = pcb_a_mover->prioridad;
-        } else {
-            prio = 0;
-        }
-        pthread_mutex_lock(&m_ready);
-        list_add(colas_ready[prio], pcb_a_mover);
-        pthread_mutex_unlock(&m_ready);
-
-        if(kernel_config.queue_preemption == 1) {
-            if(pcb_en_ejecucion != NULL &&
-               pcb_a_mover->prioridad < pcb_en_ejecucion->prioridad) {
-                int fd_desalojo = buscar_fd_por_pid(pcb_en_ejecucion->pid);
-                if(fd_desalojo != -1) {
-                    log_info(logger, "## (%d) Prioridad: %d Desalojado por cola mas prioritaria por el proceso %d con prioridad %d",
-                        pcb_en_ejecucion->pid, pcb_en_ejecucion->prioridad, pcb_a_mover->pid, pcb_a_mover->prioridad);
-                    op_code interrupcion = INTERRUPCION;
-                    send(fd_desalojo, &interrupcion, sizeof(op_code), 0);
-                }
-            }
-        }
-        sem_post(&sem_procesos_ready);
     }
+    list_destroy(claves);
+    pcb_a_mover->prioridad = prio_heredada;
+
+    int prio;
+    if(strcmp(kernel_config.algoritmo_planificacion, "CMN") == 0) {
+        prio = pcb_a_mover->prioridad;
+    } else {
+        prio = 0;
+    }
+    pthread_mutex_lock(&m_ready);
+    list_add(colas_ready[prio], pcb_a_mover);
+    pthread_mutex_unlock(&m_ready);
+
+    if(kernel_config.queue_preemption == 1) {
+        if(pcb_en_ejecucion != NULL &&
+           pcb_a_mover->prioridad < pcb_en_ejecucion->prioridad) {
+            int fd_desalojo = buscar_fd_por_pid(pcb_en_ejecucion->pid);
+            if(fd_desalojo != -1) {
+                log_info(logger, "## (%d) Prioridad: %d Desalojado por cola mas prioritaria por el proceso %d con prioridad %d",
+                    pcb_en_ejecucion->pid, pcb_en_ejecucion->prioridad, pcb_a_mover->pid, pcb_a_mover->prioridad);
+                op_code interrupcion = INTERRUPCION;
+                send(fd_desalojo, &interrupcion, sizeof(op_code), 0);
+            }
+        }
+    }
+    sem_post(&sem_procesos_ready);
+}
+
+void mover_a_ready(int pid_buscado) {
+    t_pcb* pcb_a_mover = sacar_de_block(pid_buscado);
+    encolar_en_ready(pcb_a_mover);
 }

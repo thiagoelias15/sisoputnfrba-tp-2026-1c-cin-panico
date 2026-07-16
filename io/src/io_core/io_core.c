@@ -37,35 +37,40 @@ void ejecutar_sleep(int fd_scheduler)
 
 void ejecutar_stdin(int fd_scheduler)
 {
-
     int tam, dir, pid;
 
-    /* Recibimos 3 numeros enteros que nos mando el scheduler: tamaño, direccion y pid y los guardamos.
-    Si se cambia el orden de envio desde el scheduler tambien debemos cambiarlo aqui sino se va a
-    guardar algo en una variable que no corresponde. */
     recv(fd_scheduler, &tam, sizeof(int), MSG_WAITALL);
     recv(fd_scheduler, &dir, sizeof(int), MSG_WAITALL);
     recv(fd_scheduler, &pid, sizeof(int), MSG_WAITALL);
 
-    //  1° Log Obligatorio exigido por el TP
     log_info(logger, "## PID: %d Inicio de IO", pid);
+    log_info(logger, "## PID: %d Ingrese %d caracteres:", pid, tam);
 
-    //  Log Obligatorio específico para STDIN
-    int cant_numeros = tam / sizeof(int);
-    log_info(logger, "## PID: %d Ingrese %d numero/s:", pid, cant_numeros);
-    // calloc reserva la memoria y la llena automáticamente de '\0' (barra cero).
-    // Así nos ahorramos tener que rellenar a mano con un bucle if/for si el usuario escribe de menos.
-    void *buffer_a_devolver = calloc(tam, 1);
-    for(int i = 0; i < cant_numeros; i++) {
-    char* leido = readline (">");
-    if (leido != NULL)
-    {
-         int numero = atoi(leido);  // convertimos el texto a entero
-            memcpy(buffer_a_devolver + (i * sizeof(int)), &numero, sizeof(int));
-            free(leido);
+    // Leer una línea de texto plano del teclado
+    char leido[1024];
+    memset(leido, 0, sizeof(leido));
+    if(fgets(leido, sizeof(leido), stdin) != NULL) {
+        // Sacar el '\n' final si existe
+        size_t len = strlen(leido);
+        if(len > 0 && leido[len-1] == '\n') {
+            leido[len-1] = '\0';
+            len--;
         }
     }
 
+    // Preparar buffer de exactamente tam bytes
+    char *buffer_a_devolver = calloc(tam, sizeof(char));
+    size_t longitud_leida = strlen(leido);
+
+    if(longitud_leida > tam) {
+        // Truncar
+        memcpy(buffer_a_devolver, leido, tam);
+    } else {
+        // Copiar lo que hay; el resto queda en '\0' por el calloc
+        memcpy(buffer_a_devolver, leido, longitud_leida);
+    }
+
+    // Devolver al scheduler
     op_code op_respuesta = SYSCALL_STDIN;
     send(fd_scheduler, &op_respuesta, sizeof(op_code), 0);
     send(fd_scheduler, &pid, sizeof(int), 0);
@@ -74,6 +79,7 @@ void ejecutar_stdin(int fd_scheduler)
     send(fd_scheduler, buffer_a_devolver, tam, 0);
 
     log_info(logger, "## PID: %d - Fin de IO", pid);
+
     free(buffer_a_devolver);
 }
 
