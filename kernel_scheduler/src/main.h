@@ -41,7 +41,7 @@ extern t_list* lista_cpus_sched;
 extern pthread_mutex_t m_cpus_sched;
 extern int fd_memoria;
 
-
+extern pthread_mutex_t m_fd_memoria;
 
 extern t_log* logger;
 extern int scheduler_corriendo;

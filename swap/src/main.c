@@ -22,7 +22,7 @@ int main(int argc, char* argv[]) {
     // Se inicia el Logger
 
     logger = log_create("swap.log","SWAP",1,LOG_LEVEL_INFO);
-   
+    log_info(logger, "Iniciando modulo SWAP. Esperando conexion de Kernel Memory...");
     // abrimos el archivo en modo rb+ (lectura/escritura)
     // rb+ nos permite modificar bloques sin borrar el resto del archivo
     archivo_swap = fopen(swap_config.swap_file_path, "rb+");
@@ -61,7 +61,7 @@ int main(int argc, char* argv[]) {
             // fseek: movemos el cursor del archivo a la posicion exacta del bloque
             //(Nro bloque * tamaño del bloque)
             fseek(archivo_swap, num_bloque * swap_config.block_size, SEEK_SET );
-            if(fread(buffer, swap_config.block_size, 1, archivo_swap) != -1){
+            if(fread(buffer, swap_config.block_size, 1, archivo_swap) != 1){
                 log_warning(logger, "Lectura incompleta del bloque");
             }
             // enviamos los bytes leidos de vuelta al Kernel Memory

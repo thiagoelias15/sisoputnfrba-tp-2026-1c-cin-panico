@@ -182,7 +182,7 @@ void* atender_cliente(void* arg) {
                 int pid;
                 recv(fd_cliente, &pid, sizeof(int), MSG_WAITALL);
                 log_info(logger, "## PID: %d - Suspendiendo, moviendo segmentos a SWAP", pid);
-
+                pthread_mutex_lock(&m_swap_socket); 
                 char clave_pid[10];
                 sprintf(clave_pid, "%d", pid);
 
@@ -257,7 +257,7 @@ void* atender_cliente(void* arg) {
                 pthread_mutex_lock(&m_swap);
                 dictionary_put(segmentos_en_swap, clave_pid, lista_seg_swap);
                 pthread_mutex_unlock(&m_swap);
-
+                 pthread_mutex_unlock(&m_swap_socket);
                 int ok = 1;
                 send(fd_cliente, &ok, sizeof(int), 0);
                 break;
@@ -267,7 +267,7 @@ void* atender_cliente(void* arg) {
                 int pid;
                 recv(fd_cliente, &pid, sizeof(int), MSG_WAITALL);
                 log_info(logger, "## PID: %d - Intentando des-suspender desde SWAP", pid);
-
+                 pthread_mutex_lock(&m_swap_socket);
                 char clave_pid[10];
                 sprintf(clave_pid, "%d", pid);
 
@@ -277,6 +277,7 @@ void* atender_cliente(void* arg) {
                     pthread_mutex_unlock(&m_swap);
                     log_warning(logger, "## PID: %d - No tiene segmentos en SWAP", pid);
                     int resultado = 1;  // No tiene nada que restaurar, puede volver
+                      pthread_mutex_unlock(&m_swap_socket);
                     send(fd_cliente, &resultado, sizeof(int), 0);
                     break;
                 }
@@ -303,6 +304,7 @@ void* atender_cliente(void* arg) {
 
                 if(espacio_libre < espacio_necesario) {
                     int resultado = 0;
+                      pthread_mutex_unlock(&m_swap_socket);
                     send(fd_cliente, &resultado, sizeof(int), 0);
                     log_info(logger, "## PID: %d - No hay espacio para des-suspender (necesita %d, libre %d)",
                         pid, espacio_necesario, espacio_libre);
@@ -333,23 +335,9 @@ void* atender_cliente(void* arg) {
                         memcpy(datos + offset, bloque, bytes_a_copiar);
                         free(bloque);
                     }
-
-                    // Asignar memoria en los sticks
-                    int id_asignado = asignar_memoria(pid, ss->tamanio);
-                    if(id_asignado != -1) {
-                        // Buscar la base del segmento recién asignado
-                        uint32_t base_nueva = 0;
-                        pthread_mutex_lock(&m_memoria);
-                        for(int j = 0; j < list_size(tabla_segmentos_global); j++) {
-                            t_segmento_memoria* seg = list_get(tabla_segmentos_global, j);
-                            if(seg->pid == pid && seg->tamanio == ss->tamanio) {
-                                seg->id = ss->id_segmento;
-                                base_nueva = seg->base;
-                                break;
-                            }
-                        }
-                        pthread_mutex_unlock(&m_memoria);
-
+                   // Asignar memoria en los sticks (con el id correcto)
+                    uint32_t base_nueva = asignar_memoria(pid, ss->tamanio, ss->id_segmento);
+                    if(base_nueva != 999999) {
                         // Escribir los datos en el stick
                         escribir_en_sticks(base_nueva, datos, ss->tamanio);
                         log_info(logger, "## PID: %d - Segmento %d restaurado desde SWAP en base %d",
@@ -365,6 +353,7 @@ void* atender_cliente(void* arg) {
                 list_destroy_and_destroy_elements(lista_seg_swap, free);
 
                 int resultado = 1;
+                  pthread_mutex_unlock(&m_swap_socket);
                 send(fd_cliente, &resultado, sizeof(int), 0);
                 log_info(logger, "## PID: %d - Des-suspendido exitosamente", pid);
                 break;
@@ -394,11 +383,11 @@ void atender_mem_alloc(int fd_cliente) {
 
     log_info(logger, "## PID: %d - Crear Segmento - ID: %d - Tamaño: %d", pid, id_segmento, tam_segmento);
 
-    int id_asignado = asignar_memoria(pid, tam_segmento);
+    uint32_t direccion_base = asignar_memoria(pid, tam_segmento, id_segmento);
     int hubo_compactacion = 0;
 
-    if(id_asignado == -1) {
-        // Le avisamos al scheduler: -1 significa "necesito compactar"
+    if(direccion_base == 999999) {
+        // No hay espacio, pedimos compactar
         int necesita_compactar = -1;
         send(fd_cliente, &necesita_compactar, sizeof(int), 0);
 
@@ -412,30 +401,16 @@ void atender_mem_alloc(int fd_cliente) {
         int fin_compactacion = 1;
         send(fd_cliente, &fin_compactacion, sizeof(int), 0);
 
-        id_asignado = asignar_memoria(pid, tam_segmento);
+        direccion_base = asignar_memoria(pid, tam_segmento, id_segmento);
         hubo_compactacion = 1;
     }
 
     if(!hubo_compactacion) {
-        // Si NO compactamos, mandamos un 0 como primer respuesta
-        // (el scheduler siempre espera este int primero)
         int ok = 0;
         send(fd_cliente, &ok, sizeof(int), 0);
     }
 
-    uint32_t direccion_base = 999999;
-
-    if(id_asignado != -1) {
-        pthread_mutex_lock(&m_memoria);
-        for(int i = 0; i < list_size(tabla_segmentos_global); i++) {
-            t_segmento_memoria* seg = list_get(tabla_segmentos_global, i);
-            if(seg->pid == pid && seg->tamanio == tam_segmento) {
-                seg->id = id_segmento;
-                direccion_base = seg->base;
-                break;
-            }
-        }
-        pthread_mutex_unlock(&m_memoria);
+    if(direccion_base != 999999) {
         log_info(logger, "## PID: %d - Segmento Creado %d - Tamaño: %d - Base: %d", pid, id_segmento, tam_segmento, direccion_base);
     } else {
         log_error(logger, "Out of Memory incluso después de compactar.");

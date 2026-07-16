@@ -2,7 +2,7 @@
 #include "../main.h"
 #include "../config/config.h"
 static t_memory_stick_info* buscar_stick(uint32_t dir_global);
-
+pthread_mutex_t m_swap_socket;
 t_list* tabla_segmentos_global;
 pthread_mutex_t m_memoria;
 t_dictionary* mapeo_archivos_procesos;
@@ -64,39 +64,39 @@ t_segmento_memoria* buscar_hueco_worst_fit(uint32_t tamanio_necesario){
 // asignar memoria: llama a best fit y "parte" el hueco encontrado, 1. encuenta el hueco,2.si es mas grande que el pedido, crea un nuevo segmento de "resto"
 // 3. actualiza los punteros y marcas de ocupado
 
-int asignar_memoria(int pid, uint32_t tamanio) {
-    pthread_mutex_lock(&m_memoria); // bloqueamos el acceso para que nadie mas la toque la tabla
-   t_segmento_memoria* hueco = NULL;
-   if(strcmp(memoria_config.allocation_strategy, "BEST")== 0){
-    hueco = buscar_hueco_best_fit(tamanio);
-   }else{
-    hueco = buscar_hueco_worst_fit(tamanio);
-   }
+uint32_t asignar_memoria(int pid, uint32_t tamanio, int id_segmento) {
+    pthread_mutex_lock(&m_memoria);
+    t_segmento_memoria* hueco = NULL;
+    if(strcmp(memoria_config.allocation_strategy, "BEST")== 0){
+        hueco = buscar_hueco_best_fit(tamanio);
+    }else{
+        hueco = buscar_hueco_worst_fit(tamanio);
+    }
 
-    // si sobra espacio, creamos un nuevo segmento con el "resto"
     if(hueco == NULL){
         pthread_mutex_unlock(&m_memoria);
-        return -1;
+        return 999999; // sin espacio
     }
-    if(hueco -> tamanio > tamanio) {
-        t_segmento_memoria* resto = malloc(sizeof(t_segmento_memoria));
-        resto -> id = list_size(tabla_segmentos_global); // ID nuevo
-        resto -> pid = -1;
-        resto -> base = hueco -> base + tamanio;
-        resto-> tamanio = hueco-> tamanio - tamanio;
-        resto-> ocupado = 0; // Libre
 
+    if(hueco->tamanio > tamanio) {
+        t_segmento_memoria* resto = malloc(sizeof(t_segmento_memoria));
+        resto->id = -1;
+        resto->pid = -1;
+        resto->base = hueco->base + tamanio;
+        resto->tamanio = hueco->tamanio - tamanio;
+        resto->ocupado = 0;
         list_add(tabla_segmentos_global, resto);
     }
-    // actualizamos el hueco original para que sea el segmento del proceso
-    hueco-> ocupado = 1;
-    hueco -> pid = pid;
-    hueco-> tamanio = tamanio;
 
+    hueco->ocupado = 1;
+    hueco->pid = pid;
+    hueco->id = id_segmento;   // le ponemos el ID correcto directo
+    hueco->tamanio = tamanio;
+
+    uint32_t base = hueco->base;
     pthread_mutex_unlock(&m_memoria);
-    return hueco -> id; // retornamos el ID del segmento asignado
+    return base;  // devolvemos la base directamente
 }
-
 // funcion liberar memoria, busca el segmento por PID y ID, lo marca como libre y une huecos adyacentes
 
 void liberar_memoria(int pid, int id_segmento){
@@ -105,13 +105,43 @@ void liberar_memoria(int pid, int id_segmento){
 
     for(int i = 0; i < list_size(tabla_segmentos_global); i++){
         t_segmento_memoria* seg = list_get(tabla_segmentos_global, i);
-        if(seg -> pid == pid && seg -> id == id_segmento){
-            seg -> ocupado = 0;
-            seg -> pid =-1;
+        if(seg->pid == pid && seg->id == id_segmento){
+            seg->ocupado = 0;
+            seg->pid = -1;
             log_info(logger, "## Segmento %d liberado (PID: %d)", id_segmento, pid);
             break;
         }
     }
+
+    // Unir huecos libres adyacentes (consolidación)
+    // Ordenamos por base primero
+    for(int i = 0; i < list_size(tabla_segmentos_global) - 1; i++){
+        for(int j = 0; j < list_size(tabla_segmentos_global) - 1 - i; j++){
+            t_segmento_memoria* a = list_get(tabla_segmentos_global, j);
+            t_segmento_memoria* b = list_get(tabla_segmentos_global, j+1);
+            if(a->base > b->base){
+                list_replace(tabla_segmentos_global, j, b);
+                list_replace(tabla_segmentos_global, j+1, a);
+            }
+        }
+    }
+
+    // Recorremos y fusionamos huecos libres contiguos
+    for(int i = 0; i < list_size(tabla_segmentos_global) - 1; ){
+        t_segmento_memoria* actual = list_get(tabla_segmentos_global, i);
+        t_segmento_memoria* siguiente = list_get(tabla_segmentos_global, i+1);
+
+        if(actual->ocupado == 0 && siguiente->ocupado == 0 &&
+           actual->base + actual->tamanio == siguiente->base){
+            // Fusionamos: el actual absorbe al siguiente
+            actual->tamanio += siguiente->tamanio;
+            list_remove_and_destroy_element(tabla_segmentos_global, i+1, free);
+            // No avanzamos i, por si hay más huecos seguidos que fusionar
+        } else {
+            i++;
+        }
+    }
+
     pthread_mutex_unlock(&m_memoria);
 }
 

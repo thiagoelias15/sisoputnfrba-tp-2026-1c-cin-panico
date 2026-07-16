@@ -18,7 +18,7 @@ pthread_mutex_t m_ready, m_new, m_block, m_exit;
 sem_t sem_procesos_ready;
 t_dictionary* dic_mutex;
 t_dictionary* dic_interfaces;
-
+pthread_mutex_t m_fd_memoria;
 t_list* lista_cpus_sched;
 pthread_mutex_t m_cpus_sched;
 int fd_memoria = -1;

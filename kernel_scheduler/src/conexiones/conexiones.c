@@ -36,12 +36,13 @@ void* timer_suspension(void* arg) {
 
         encontrado->estado = SUSP_BLOCK;
         log_info(logger, "## (%d) Pasa del estado BLOCK al estado SUSP_BLOCK", pid);
-
+         pthread_mutex_lock(&m_fd_memoria);
         op_code op = SWAP_ESCRITURA;
         send(fd_memoria, &op, sizeof(op_code), 0);
         send(fd_memoria, &pid, sizeof(int), 0);
         int confirmacion;
         recv(fd_memoria, &confirmacion, sizeof(int), MSG_WAITALL);
+         pthread_mutex_unlock(&m_fd_memoria);
         log_info(logger, "## (%d) Segmentos movidos a SWAP", pid);
 
         pthread_mutex_lock(&m_susp);
@@ -60,14 +61,14 @@ void intentar_desuspender() {
 
     for(int i = 0; i < list_size(cola_susp_ready); i++) {
         t_pcb* pcb = list_get(cola_susp_ready, i);
-
+         pthread_mutex_lock(&m_fd_memoria);
         op_code op = SWAP_LECTURA;
         send(fd_memoria, &op, sizeof(op_code), 0);
         send(fd_memoria, &(pcb->pid), sizeof(int), 0);
 
         int resultado;
         recv(fd_memoria, &resultado, sizeof(int), MSG_WAITALL);
-
+         pthread_mutex_unlock(&m_fd_memoria);
         if(resultado == 1) {
             list_remove(cola_susp_ready, i);
             i--;
@@ -137,13 +138,14 @@ void *atender_cliente(void *arg)
 
                 log_info(logger, "## (%d) Solicito syscall: EXIT", pcb_upd->pid);
                 log_info(logger, "## (%d) Pasa del estado EXEC al estado EXIT", pcb_upd->pid);
-                
+                 pthread_mutex_lock(&m_fd_memoria);
                 //avisarle a la memory que libere los segmentos de ese proceso
                 op_code op_exit = SYSCALL_EXIT;
                 send(fd_memoria, &op_exit, sizeof(op_code), 0);
                 send(fd_memoria, &(pcb_upd->pid), sizeof(int), 0);
                 int confirmacion;
                 recv(fd_memoria, &confirmacion, sizeof(int), MSG_WAITALL);
+                pthread_mutex_unlock(&m_fd_memoria);
                 log_info(logger, "## (%d) finalizó su ejecución", pcb_upd->pid);
                 list_add(cola_exit, pcb_upd);
                 sem_post(&sem_procesos_ready); // La CPU queda libre
@@ -154,13 +156,14 @@ void *atender_cliente(void *arg)
             case SEG_FAULT:
             {
                 log_info(logger, "## (%d) Pasa del estado EXEC al estado EXIT", pcb_upd->pid);
-
+                 pthread_mutex_lock(&m_fd_memoria);
                 //avisamos a la memory que libere los segmentos de ese proceso
                 op_code op_exit = SYSCALL_EXIT;
                 send(fd_memoria, &op_exit, sizeof(op_code), 0);
                 send(fd_memoria, &(pcb_upd->pid), sizeof(int), 0);
                 int confirmacion;
                 recv(fd_memoria, &confirmacion, sizeof(int), MSG_WAITALL);
+                 pthread_mutex_unlock(&m_fd_memoria);
                 log_info(logger, "## (%d) finalizó su ejecución por SEG_FAULT", pcb_upd->pid);
 
                 // lo matamos
@@ -382,6 +385,7 @@ void *atender_cliente(void *arg)
                 pthread_create(&hilo_susp, NULL, timer_suspension, pid_timer);
                 pthread_detach(hilo_susp);
                 // 1. EL SCHEDULER LE PIDE LA INFO A MEMORIA
+                 pthread_mutex_lock(&m_fd_memoria);
                 op_code op_leer = LEER_MEMORIA;
                 send(fd_memoria, &op_leer, sizeof(op_code), 0);
                 send(fd_memoria, &dir, sizeof(int), 0);
@@ -390,7 +394,7 @@ void *atender_cliente(void *arg)
                 // Preparamos un buffer y recibimos el texto
                 char *texto_de_memoria = calloc(tam + 1, sizeof(char)); // +1 para el '\0'
                 recv(fd_memoria, texto_de_memoria, tam, MSG_WAITALL);
-
+                 pthread_mutex_unlock(&m_fd_memoria);
                 /*Si hay una interfaz conectada , el Kernel le envía un mensaje avisando que hay una tarea de STDOUT.
                 Le pasa el tamaño, la dirección y el PID del proceso para que la interfaz sepa a quién pertenece la operación*/
 
@@ -456,7 +460,7 @@ void *atender_cliente(void *arg)
                 recv(socket_cliente, &tam_segmento, sizeof(int), MSG_WAITALL);
 
                 log_info(logger, "## (%d) Solicitó syscall: MEM_ALLOC - ID: %d - Tam: %d", pcb_upd->pid, id_segmento, tam_segmento);
-
+                 pthread_mutex_lock(&m_fd_memoria);
                 // 1. Le mandamos la solicitud real a Kernel Memory
                 op_code op_memoria = SYSCALL_MEM_ALLOC;
                 send(fd_memoria, &op_memoria, sizeof(op_code), 0);
@@ -480,7 +484,7 @@ void *atender_cliente(void *arg)
                 // 2. Esperamos que la Memoria haga su magia y nos devuelva la Dirección Base
                 uint32_t direccion_base;
                 recv(fd_memoria, &direccion_base, sizeof(uint32_t), MSG_WAITALL);
-
+                 pthread_mutex_unlock(&m_fd_memoria);
                 // 3. Creamos la estructura del segmento
                 if(direccion_base == 999999) {
                     log_error(logger, "## (%d) MEM_ALLOC falló - Out of Memory", pcb_upd->pid);
@@ -491,9 +495,16 @@ void *atender_cliente(void *arg)
                     nuevo_segmento->direccion_base = direccion_base;
                     list_add(pcb_upd->tabla_segmentos, nuevo_segmento);
                 }
-
-                // 5. El proceso vuelve a CPU directo
-                 enviar_pcb(pcb_upd, socket_cliente, CONTEXTO_PCB);
+// El proceso vuelve a READY, el planificador lo despacha
+                pcb_upd->estado = READY;
+                int prio_alloc = 0;
+                if (strcmp(kernel_config.algoritmo_planificacion, "CMN") == 0) {
+                    prio_alloc = pcb_upd->prioridad;
+                }
+                pthread_mutex_lock(&m_ready);
+                list_add(colas_ready[prio_alloc], pcb_upd);
+                pthread_mutex_unlock(&m_ready);
+                sem_post(&sem_procesos_ready);
                 break;
             }
 
@@ -503,7 +514,7 @@ void *atender_cliente(void *arg)
                 recv(socket_cliente, &id_segmento, sizeof(int), MSG_WAITALL);
 
                 log_info(logger, "## (%d) Solicitó syscall: MEM_FREE - ID: %d", pcb_upd->pid, id_segmento);
-
+                 pthread_mutex_lock(&m_fd_memoria);
                 // 1. Le avisamos a la Memoria que destruya el segmento
                 op_code op_memoria = SYSCALL_MEM_FREE;
                 send(fd_memoria, &op_memoria, sizeof(op_code), 0);
@@ -513,7 +524,7 @@ void *atender_cliente(void *arg)
                 // 2. Esperamos la confirmación (OK) de la memoria
                 int confirmacion;
                 recv(fd_memoria, &confirmacion, sizeof(int), MSG_WAITALL);
-
+                 pthread_mutex_unlock(&m_fd_memoria);
                 // 3. Buscamos el segmento en la tabla del PCB y lo borramos
                 for (int i = 0; i < list_size(pcb_upd->tabla_segmentos); i++)
                 {
@@ -526,10 +537,17 @@ void *atender_cliente(void *arg)
                     }
                 }
 
-                // 4. El proceso vuelve a CPU directo
-                 enviar_pcb(pcb_upd, socket_cliente, CONTEXTO_PCB);
-                intentar_desuspender();
-                 break;
+                // El proceso vuelve a READY, el planificador lo despacha
+                pcb_upd->estado = READY;
+                int prio_alloc = 0;
+                if (strcmp(kernel_config.algoritmo_planificacion, "CMN") == 0) {
+                    prio_alloc = pcb_upd->prioridad;
+                }
+                pthread_mutex_lock(&m_ready);
+                list_add(colas_ready[prio_alloc], pcb_upd);
+                pthread_mutex_unlock(&m_ready);
+                sem_post(&sem_procesos_ready);
+                break;
             }
                 
 
@@ -599,16 +617,16 @@ if (cod_op == MENSAJE)
                             }
                         }
                         pthread_mutex_unlock(&m_susp);
+                    intentar_desuspender();
                     }
                 }
 
                 free(resp);
             }
-            if (cod_op == SYSCALL_STDIN) // bloque para recibir la lectrua de teclado
+           if (cod_op == SYSCALL_STDIN)
             {
                 int pid_fin, dir_fisica, tam_buffer;
 
-                // Leemos exactamente lo que la IO nos mandó
                 recv(socket_cliente, &pid_fin, sizeof(int), MSG_WAITALL);
                 recv(socket_cliente, &dir_fisica, sizeof(int), MSG_WAITALL);
                 recv(socket_cliente, &tam_buffer, sizeof(int), MSG_WAITALL);
@@ -616,20 +634,7 @@ if (cod_op == MENSAJE)
                 void *buffer_leido = malloc(tam_buffer);
                 recv(socket_cliente, buffer_leido, tam_buffer, MSG_WAITALL);
 
-                // 1. El Scheduler hace de cadete y guarda el texto en Memoria
-                op_code op_mem = ESCRIBIR_MEMORIA;
-                send(fd_memoria, &op_mem, sizeof(op_code), 0);
-                send(fd_memoria, &dir_fisica, sizeof(int), 0);
-                send(fd_memoria, &tam_buffer, sizeof(int), 0);
-                send(fd_memoria, buffer_leido, tam_buffer, 0);
-
-                // 2. Esperamos la confirmación (OK) de la memoria
-                int confirmacion;
-                recv(fd_memoria, &confirmacion, sizeof(int), MSG_WAITALL);
-
-                free(buffer_leido);
-
-                // 3. Despertamos al proceso para que vuelva a la CPU
+                // Primero vemos en qué estado está el proceso
                 int en_block_stdin = 0;
                 pthread_mutex_lock(&m_block);
                 for(int i = 0; i < list_size(cola_block); i++) {
@@ -642,9 +647,26 @@ if (cod_op == MENSAJE)
                 pthread_mutex_unlock(&m_block);
 
                 if(en_block_stdin) {
+                    // Proceso en memoria: escribimos directo y lo despertamos
+                    pthread_mutex_lock(&m_fd_memoria);
+                    op_code op_mem = ESCRIBIR_MEMORIA;
+                    send(fd_memoria, &op_mem, sizeof(op_code), 0);
+                    send(fd_memoria, &dir_fisica, sizeof(int), 0);
+                    send(fd_memoria, &tam_buffer, sizeof(int), 0);
+                    send(fd_memoria, buffer_leido, tam_buffer, 0);
+                    int confirmacion;
+                    recv(fd_memoria, &confirmacion, sizeof(int), MSG_WAITALL);
+                    pthread_mutex_unlock(&m_fd_memoria);
+                    free(buffer_leido);
+
                     log_info(logger, "## (%d) finalizo IO (STDIN) y paso a READY", pid_fin);
                     mover_a_ready(pid_fin);
                 } else {
+                    // Proceso suspendido: NO escribimos todavía (sus datos están en SWAP)
+                    // Lo pasamos a SUSP_READY y guardamos el input pendiente
+                    free(buffer_leido); // el dato se perdería, pero el proceso al des-suspenderse
+                                        // relee su instruccion STDIN y la vuelve a pedir
+
                     pthread_mutex_lock(&m_susp);
                     for(int i = 0; i < list_size(cola_susp_block); i++) {
                         t_pcb* p = list_get(cola_susp_block, i);
@@ -657,6 +679,7 @@ if (cod_op == MENSAJE)
                         }
                     }
                     pthread_mutex_unlock(&m_susp);
+                    intentar_desuspender();
                 }
             }
         }
