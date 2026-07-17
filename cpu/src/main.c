@@ -72,8 +72,10 @@ int main(int argc, char* argv[]) {
 
     int fd_scheduler = crear_conexion(cpu_config.ip_sched, cpu_config.puerto_sched);
     if(fd_scheduler != -1) {
-        enviar_mensaje(cpu_config.id_modulo, MENSAJE, fd_scheduler);
-        log_info(logger, "Handshake enviado con ID: %s", cpu_config.id_modulo);
+        char id_con_numero[256];
+        sprintf(id_con_numero, "%s_%s", cpu_config.id_modulo, argv[2]);
+        enviar_mensaje(id_con_numero, MENSAJE, fd_scheduler);
+        log_info(logger, "Handshake enviado con ID: %s", id_con_numero);
     }
     
     // si las conexiones a Memoria y Scheduler fueron exitosas, inicia el CPU
