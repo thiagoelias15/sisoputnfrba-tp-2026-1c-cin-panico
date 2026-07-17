@@ -17,7 +17,6 @@ int swap_file_size = 0;
 t_dictionary* segmentos_en_swap;
 pthread_mutex_t m_swap;
 int proximo_bloque_swap = 0; // para saber que bloque de swap esta libre
-
 void inicializar_memoria() {
     tabla_segmentos_global = list_create();
     pthread_mutex_init(&m_memoria, NULL);
@@ -230,9 +229,10 @@ static t_memory_stick_info* buscar_stick(uint32_t dir_global){
             
             // Avisarle al Scheduler
             if(fd_scheduler_global != -1) {
-                op_code alerta = MEMORIA_CORRUPTA;
-                send(fd_scheduler_global, &alerta, sizeof(op_code), 0);
-            }
+    log_error(logger, "## Cerrando conexión con scheduler para BSOD");
+    close(fd_scheduler_global);
+    fd_scheduler_global = -1;
+}
             return;
         }
 
@@ -273,9 +273,10 @@ static t_memory_stick_info* buscar_stick(uint32_t dir_global){
             pthread_mutex_unlock(&m_sticks);
             
             if(fd_scheduler_global != -1) {
-                op_code alerta = MEMORIA_CORRUPTA;
-                send(fd_scheduler_global, &alerta, sizeof(op_code), 0);
-            }
+    log_error(logger, "## Cerrando conexión con scheduler para BSOD");
+    close(fd_scheduler_global);
+    fd_scheduler_global = -1;
+}
             return;
         }
 
