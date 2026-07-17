@@ -44,14 +44,17 @@ void inicializar_estructuras(void) {
     pthread_mutex_init(&m_cpus_sched, NULL);
 }
 void crear_proceso(char* nombre_archivo, int prioridad) {
+    pthread_mutex_lock(&m_new);
     int pid_nuevo = PID_GLOBAL;
     PID_GLOBAL++;
+    pthread_mutex_unlock(&m_new);
 
     // ------------------- ENVIAR MENSAJE DE CREACIÓN A LA MEMORIA ------------------- //
     op_code cop = SYSCALL_INIT_PROC;
     uint32_t tam_nombre = strlen(nombre_archivo) + 1;
 
     // Enviamos: Código de operación, el PID y el tamaño del string seguido del string del archivo
+    pthread_mutex_lock(&m_fd_memoria);
     send(fd_memoria, &cop, sizeof(op_code), 0);
     send(fd_memoria, &pid_nuevo, sizeof(int), 0);
     send(fd_memoria, &tam_nombre, sizeof(uint32_t), 0);
@@ -60,6 +63,7 @@ void crear_proceso(char* nombre_archivo, int prioridad) {
     // Esperamos la confirmación (OK) de la Memoria para avanzar seguros
     int respuesta_memoria;
     recv_memoria(&respuesta_memoria, sizeof(int));
+    pthread_mutex_unlock(&m_fd_memoria);
     // ------------------------------------------------------------------------------- //
     t_pcb* pcb_nuevo = pcb_create();
     pcb_nuevo->pid = pid_nuevo;
@@ -69,12 +73,9 @@ void crear_proceso(char* nombre_archivo, int prioridad) {
     
     log_info(logger, "## (%d) Se crea el proceso - Estado: NEW", pcb_nuevo->pid);
     
-    pthread_mutex_lock(&m_new);
-    list_add(cola_new, pcb_nuevo);
    
-    int index_ultimo = list_size(cola_new) -1;
     t_pcb* pcb_a_ready = list_remove(cola_new, index_ultimo);
-    pthread_mutex_unlock(&m_new);
+    
 
     log_info(logger, "## (%d) Pasa del estado NEW a READY", pcb_a_ready->pid); 
 
