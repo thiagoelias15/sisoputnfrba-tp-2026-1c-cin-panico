@@ -74,8 +74,8 @@ void crear_proceso(char* nombre_archivo, int prioridad) {
     log_info(logger, "## (%d) Se crea el proceso - Estado: NEW", pcb_nuevo->pid);
     
    
-    t_pcb* pcb_a_ready = list_remove(cola_new, index_ultimo);
     
+     t_pcb* pcb_a_ready = pcb_nuevo;
 
     log_info(logger, "## (%d) Pasa del estado NEW a READY", pcb_a_ready->pid); 
 
