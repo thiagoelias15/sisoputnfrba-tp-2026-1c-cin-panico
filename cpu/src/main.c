@@ -110,8 +110,8 @@ int main(int argc, char* argv[]) {
             continue;
         }
 
-    if(cod_op_sched == CONTEXTO_PCB) {
-            log_info(logger, "¡Recibí CONTEXTO_PCB del Scheduler!");
+        if(cod_op_sched == CONTEXTO_PCB) {
+        
             t_pcb* pcb_actual = recibir_pcb(fd_scheduler);
             
             if(pcb_actual == NULL) {
@@ -122,20 +122,16 @@ int main(int argc, char* argv[]) {
             log_info(logger, "¡PCB recibido! PID: %d", pcb_actual->pid);
             int desalojar = 0;
             op_code motivo_desalojo = CONTEXTO_PCB;
-
-            log_info(logger, "Entrando al ciclo de instrucción...");
             
             while(!desalojar && cpu_corriendo) {
-                log_info(logger, "DEBUG: Voy a llamar a realizar_fetch...");
+                
+                log_info(logger, "##PID %d - FETCH - Program Counter %d", pcb_actual->pid, pcb_actual->pc);
                 char* instruccion = realizar_fetch(pcb_actual, fd_memoria, logger);
-                log_info(logger, "DEBUG: Volví de realizar_fetch con instrucción: %s", instruccion);
                 
                 if(instruccion == NULL) {
                     log_error(logger, "ERROR: FETCH devolvió NULL");
                     break;
                 }
-                
-                log_info(logger, "DEBUG: Instrucción recibida: %s", instruccion);
                 
                 //------ ETAPA 2° DECODE ---------------
                 // cortamos el texto por los espacios. token[0]= Comando, token[1]= parametro1 y asi sucesivamente

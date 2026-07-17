@@ -3,7 +3,7 @@
 void* atender_cpu(void* arg){
     int socket_cpu = *(int*)arg;
     free(arg);
-    log_info(logger, "## CPU conectado");
+    log_info(logger, "## CPU %d Conectada", socket_cpu);
     while(ms_corriendo) {
         op_code cod_op = recibir_operacion(socket_cpu);
         if(cod_op == -1) {
