@@ -216,7 +216,7 @@ void *atender_cliente(void *arg)
         list_add(lista_cpus_sched, cpu_nueva);
         sem_post(&sem_cpu_libre);
         pthread_mutex_unlock(&m_cpus_sched);
-        log_info(logger, "## CPU conectada - FD: %d", socket_cliente);
+        log_info(logger, "## CPU %d Conectada", socket_cliente);
 
         while (scheduler_corriendo)
         {
@@ -319,12 +319,12 @@ void *atender_cliente(void *arg)
                 pthread_mutex_unlock(&m_block);
                 // Lanzar timer de suspensión
                 block_epoch[pcb_upd->pid]++;
-t_timer_args* timer_args = malloc(sizeof(t_timer_args));
-timer_args->pid = pcb_upd->pid;
-timer_args->epoch = block_epoch[pcb_upd->pid];
-pthread_t hilo_susp;
-pthread_create(&hilo_susp, NULL, timer_suspension, timer_args);
-pthread_detach(hilo_susp);
+                t_timer_args* timer_args = malloc(sizeof(t_timer_args));
+                timer_args->pid = pcb_upd->pid;
+                timer_args->epoch = block_epoch[pcb_upd->pid];
+                pthread_t hilo_susp;
+                pthread_create(&hilo_susp, NULL, timer_suspension, timer_args);
+                pthread_detach(hilo_susp);
 
                 if (dictionary_has_key(dic_interfaces, "SLEEP"))
                 {
@@ -523,12 +523,12 @@ pthread_detach(hilo_susp);
                 pthread_mutex_unlock(&m_block); // Libera el mutex de la cola
                 // Lanzar timer de suspensión
                block_epoch[pcb_upd->pid]++;
-t_timer_args* timer_args = malloc(sizeof(t_timer_args));
-timer_args->pid = pcb_upd->pid;
-timer_args->epoch = block_epoch[pcb_upd->pid];
-pthread_t hilo_susp;
-pthread_create(&hilo_susp, NULL, timer_suspension, timer_args);
-pthread_detach(hilo_susp);
+                t_timer_args* timer_args = malloc(sizeof(t_timer_args));
+                timer_args->pid = pcb_upd->pid;
+                timer_args->epoch = block_epoch[pcb_upd->pid];
+                pthread_t hilo_susp;
+                pthread_create(&hilo_susp, NULL, timer_suspension, timer_args);
+                pthread_detach(hilo_susp);
                 if (dictionary_has_key(dic_interfaces, "STDIN"))
                 {
 
@@ -560,12 +560,12 @@ pthread_detach(hilo_susp);
                 pthread_mutex_unlock(&m_block);                                                // Libera la protección de la cola
                 // Lanzar timer de suspensión
                 block_epoch[pcb_upd->pid]++;
-t_timer_args* timer_args = malloc(sizeof(t_timer_args));
-timer_args->pid = pcb_upd->pid;
-timer_args->epoch = block_epoch[pcb_upd->pid];
-pthread_t hilo_susp;
-pthread_create(&hilo_susp, NULL, timer_suspension, timer_args);
-pthread_detach(hilo_susp);
+                t_timer_args* timer_args = malloc(sizeof(t_timer_args));
+                timer_args->pid = pcb_upd->pid;
+                timer_args->epoch = block_epoch[pcb_upd->pid];
+                pthread_t hilo_susp;
+                pthread_create(&hilo_susp, NULL, timer_suspension, timer_args);
+                pthread_detach(hilo_susp);
                 // 1. EL SCHEDULER LE PIDE LA INFO A MEMORIA
                 pthread_mutex_lock(&m_fd_memoria);
                 op_code op_leer = LEER_MEMORIA;

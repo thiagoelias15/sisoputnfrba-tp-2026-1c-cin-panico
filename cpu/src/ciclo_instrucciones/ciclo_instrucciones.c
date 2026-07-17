@@ -1,8 +1,8 @@
 #include "ciclo_instrucciones.h"
 
 char* realizar_fetch(t_pcb* pcb, int fd_memoria, t_log* logger) {
+    
     op_code op_fetch = FETCH_INSTRUCCION;
-    log_info(logger, "DEBUG: Usando fd_memoria = %d para el FETCH", fd_memoria);
     send(fd_memoria, &op_fetch, sizeof(op_code), 0);
     send(fd_memoria, &(pcb->pid), sizeof(int), 0);
     send(fd_memoria, &(pcb->pc), sizeof(uint32_t), 0);

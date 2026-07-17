@@ -23,7 +23,7 @@ void atender_creacion_proceso(int fd_kernel) {
     // Guardamos el nombre real del archivo asociado a este PID
     dictionary_put(mapeo_archivos_procesos, clave_pid, nombre_archivo);
     
-    log_info(logger, "## PID: %d - Registrado con archivo: %s", pid, nombre_archivo);
+    log_info(logger, "## PID: %d - Proceso creado con archivo: %s", pid, nombre_archivo);
     
     int ok = 1;
     send(fd_kernel, &ok, sizeof(int), 0);
@@ -84,8 +84,6 @@ void atender_fetch_cpu(int fd_cpu) {
     // Solo enviamos lo que la CPU espera recibir: tamaño + mensaje
     send(fd_cpu, &tamaño_instruccion, sizeof(int), 0);
     send(fd_cpu, instruccion, tamaño_instruccion, 0);
-
-    log_info(logger, "DEBUG: Instrucción enviada manualmente.");
     
    free(instruccion);
 }
