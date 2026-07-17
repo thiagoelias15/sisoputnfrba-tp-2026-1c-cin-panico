@@ -44,7 +44,7 @@ typedef struct {
 extern t_list* lista_cpus_sched;
 extern pthread_mutex_t m_cpus_sched;
 extern int fd_memoria;
-
+extern void* monitor_bsod(void* arg);
 extern pthread_mutex_t m_fd_memoria;
 
 extern t_log* logger;

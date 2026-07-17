@@ -1,6 +1,7 @@
 #include "main.h"
 #include "conexiones/conexiones.h"
 #include "planificador/planificador.h"
+#include <poll.h>
 int block_epoch[1000] = {0};
 int pending_wakeup[1000] = {0};
 int PID_GLOBAL = 0;
@@ -72,7 +73,9 @@ crear_proceso(argv[2], 0 );
     pthread_create(&hilo_planificador, NULL, planificador_corto_plazo, NULL); /*creamos un hilo nuevo con estos 4 parametros
     &hilo_planificador es para guardar el ID del hilo creado,NULL es para que no haga nada especial solo configuracion estandar,planificador_corto_plazo es la funcion que va a ejecutar el hilo */
     pthread_detach(hilo_planificador); //al crear un hilo linux deja vinculados el hilo nuevo al hilo main con detach desvinculamos los hilos para que el nuevo trabaje de forma independiente
-
+    pthread_t hilo_bsod;
+    pthread_create(&hilo_bsod, NULL, monitor_bsod, NULL);
+    pthread_detach(hilo_bsod);
     // ------------------------------ SCHEDULER COMO SERVIDOR ------------------------------ //
 
     int fd_escucha = iniciar_servidor(kernel_config.puerto_escucha);

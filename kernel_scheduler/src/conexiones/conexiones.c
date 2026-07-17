@@ -1,14 +1,48 @@
 #include "conexiones.h"
 #include <stdbool.h>
+#include <sys/socket.h>
 extern t_pcb *pcb_en_ejecucion;
 void intentar_desuspender();
 void reintentar_esperando_memoria();
+void* monitor_bsod(void* arg);
+
 typedef struct
 {
     int pid;
     int epoch;
 } t_timer_args;
+void bsod_exit() {
+    log_error(logger, "## BLUE SCREEN OF DEATH - Memoria corrupta detectada");
+    log_error(logger, "## Finalizando Kernel Scheduler");
+    scheduler_corriendo = 0;
+    exit(EXIT_FAILURE);
+}
 
+void* monitor_bsod(void* arg) {
+    int error = 0;
+    socklen_t len = sizeof(error);
+    while(1) {
+        usleep(500000);
+        if(getsockopt(fd_memoria, SOL_SOCKET, SO_ERROR, &error, &len) < 0 || error != 0) {
+            bsod_exit();
+        }
+        // Intentar leer 0 bytes para detectar cierre
+        char peek;
+        int r = recv(fd_memoria, &peek, 1, MSG_PEEK | MSG_DONTWAIT);
+        if(r == 0) {
+            bsod_exit();
+        }
+    }
+    return NULL;
+}
+
+
+
+int recv_memoria(void* buf, size_t size) {
+    int bytes = recv(fd_memoria, buf, size, MSG_WAITALL);
+    if(bytes <= 0) bsod_exit();
+    return bytes;
+}
 void reintentar_esperando_memoria()
 {
     pthread_mutex_lock(&m_esperando_memoria);
@@ -25,16 +59,16 @@ void reintentar_esperando_memoria()
         send(fd_memoria, &(pcb->mem_pendiente_tam), sizeof(int), 0);
 
         int primer_respuesta;
-        recv(fd_memoria, &primer_respuesta, sizeof(int), MSG_WAITALL);
+        recv_memoria(&primer_respuesta, sizeof(int));
         if (primer_respuesta == -1)
         {
             int ok = 1;
             send(fd_memoria, &ok, sizeof(int), 0);
             int fin_compactacion;
-            recv(fd_memoria, &fin_compactacion, sizeof(int), MSG_WAITALL);
+            recv_memoria(&fin_compactacion, sizeof(int));
         }
         uint32_t direccion_base;
-        recv(fd_memoria, &direccion_base, sizeof(uint32_t), MSG_WAITALL);
+        recv_memoria(&direccion_base, sizeof(uint32_t));
         pthread_mutex_unlock(&m_fd_memoria);
 
         if (direccion_base != 999999)
@@ -99,7 +133,7 @@ void* timer_suspension(void* arg) {
         send(fd_memoria, &op, sizeof(op_code), 0);
         send(fd_memoria, &pid, sizeof(int), 0);
         int confirmacion;
-        recv(fd_memoria, &confirmacion, sizeof(int), MSG_WAITALL);
+        recv_memoria(&confirmacion, sizeof(int));
         pthread_mutex_unlock(&m_fd_memoria);
         log_info(logger, "## (%d) Segmentos movidos a SWAP", pid);
 
@@ -137,7 +171,7 @@ void intentar_desuspender()
         send(fd_memoria, &(pcb->pid), sizeof(int), 0);
 
         int resultado;
-        recv(fd_memoria, &resultado, sizeof(int), MSG_WAITALL);
+        recv_memoria(&resultado, sizeof(int));
         pthread_mutex_unlock(&m_fd_memoria);
         if (resultado == 1)
         {
@@ -219,7 +253,7 @@ void *atender_cliente(void *arg)
                 send(fd_memoria, &op_exit, sizeof(op_code), 0);
                 send(fd_memoria, &(pcb_upd->pid), sizeof(int), 0);
                 int confirmacion;
-                recv(fd_memoria, &confirmacion, sizeof(int), MSG_WAITALL);
+                recv_memoria(&confirmacion, sizeof(int));
                 pthread_mutex_unlock(&m_fd_memoria);
                 log_info(logger, "## (%d) finalizó su ejecución", pcb_upd->pid);
                 list_add(cola_exit, pcb_upd);
@@ -238,7 +272,7 @@ void *atender_cliente(void *arg)
                 send(fd_memoria, &op_exit, sizeof(op_code), 0);
                 send(fd_memoria, &(pcb_upd->pid), sizeof(int), 0);
                 int confirmacion;
-                recv(fd_memoria, &confirmacion, sizeof(int), MSG_WAITALL);
+               recv_memoria(&confirmacion, sizeof(int));
                 pthread_mutex_unlock(&m_fd_memoria);
                 log_info(logger, "## (%d) finalizó su ejecución por SEG_FAULT", pcb_upd->pid);
 
@@ -541,7 +575,7 @@ void *atender_cliente(void *arg)
 
                 // Preparamos un buffer y recibimos el texto
                 char *texto_de_memoria = calloc(tam + 1, sizeof(char)); // +1 para el '\0'
-                recv(fd_memoria, texto_de_memoria, tam, MSG_WAITALL);
+               recv_memoria(texto_de_memoria, tam);
                 pthread_mutex_unlock(&m_fd_memoria);
 
                 /*Si hay una interfaz conectada , el Kernel le envía un mensaje avisando que hay una tarea de STDOUT.
@@ -620,7 +654,7 @@ void *atender_cliente(void *arg)
                 // KM contesta si es -1 -> necesita compactar
                 //  si es >= a 0 -> no necesita
                 int primer_respuesta;
-                recv(fd_memoria, &primer_respuesta, sizeof(int), MSG_WAITALL);
+               recv_memoria(&primer_respuesta, sizeof(int));
                 if (primer_respuesta == -1)
                 {
                     // KM necesita que desalojemos todas las CPUs
@@ -628,12 +662,12 @@ void *atender_cliente(void *arg)
                     send(fd_memoria, &ok, sizeof(int), 0);
                     // esperamos que KM compacte
                     int fin_compactacion;
-                    recv(fd_memoria, &fin_compactacion, sizeof(int), MSG_WAITALL);
+                    recv_memoria(&fin_compactacion, sizeof(int));
                     log_info(logger, " ## Fin de compactacion");
                 }
                 // 2. Esperamos que la Memoria haga su magia y nos devuelva la Dirección Base
                 uint32_t direccion_base;
-                recv(fd_memoria, &direccion_base, sizeof(uint32_t), MSG_WAITALL);
+                recv_memoria(&direccion_base, sizeof(uint32_t));
                 pthread_mutex_unlock(&m_fd_memoria);
                 // 3. Creamos la estructura del segmento
                 if (direccion_base == 999999)
@@ -683,7 +717,7 @@ void *atender_cliente(void *arg)
 
                 // 2. Esperamos la confirmación (OK) de la memoria
                 int confirmacion;
-                recv(fd_memoria, &confirmacion, sizeof(int), MSG_WAITALL);
+              recv_memoria(&confirmacion, sizeof(int));
                 pthread_mutex_unlock(&m_fd_memoria);
                 // 3. Buscamos el segmento en la tabla del PCB y lo borramos
                 for (int i = 0; i < list_size(pcb_upd->tabla_segmentos); i++)
@@ -811,7 +845,7 @@ void *atender_cliente(void *arg)
                     send(fd_memoria, &tam_buffer, sizeof(int), 0);
                     send(fd_memoria, buffer_leido, tam_buffer, 0);
                     int confirmacion;
-                    recv(fd_memoria, &confirmacion, sizeof(int), MSG_WAITALL);
+                  recv_memoria(&confirmacion, sizeof(int));
                     pthread_mutex_unlock(&m_fd_memoria);
                     free(buffer_leido);
 

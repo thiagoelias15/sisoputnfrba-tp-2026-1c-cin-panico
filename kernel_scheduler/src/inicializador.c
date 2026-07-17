@@ -1,6 +1,7 @@
 #include "main.h"
 #include <utils/pcb/pcb.h>
 extern int PID_GLOBAL;
+extern int recv_memoria(void* buf, size_t size);
 void inicializar_estructuras(void) {
     cola_new = list_create();
     cola_esperando_memoria = list_create();
@@ -58,7 +59,7 @@ void crear_proceso(char* nombre_archivo, int prioridad) {
 
     // Esperamos la confirmación (OK) de la Memoria para avanzar seguros
     int respuesta_memoria;
-    recv(fd_memoria, &respuesta_memoria, sizeof(int), MSG_WAITALL);
+    recv_memoria(&respuesta_memoria, sizeof(int));
     // ------------------------------------------------------------------------------- //
     t_pcb* pcb_nuevo = pcb_create();
     pcb_nuevo->pid = pid_nuevo;

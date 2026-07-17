@@ -3,9 +3,21 @@
 #include "../memoria_administrador/memoria_administrador.h"
 #include "../config/config.h"
 #include <string.h>
+
 extern t_list* tabla_segmentos_global;
 extern pthread_mutex_t m_memoria;
 int fd_scheduler_global = -1;
+
+void* vigilar_stick(void* arg) {
+    int fd = *(int*)arg;
+    free(arg);
+
+    char buf;
+    recv(fd, &buf, 1, 0);
+
+    log_error(logger, "## Memory Stick desconectado! Memoria corrupta");
+    exit(EXIT_FAILURE);
+}
 void* atender_cliente(void* arg) {
 
     int fd_cliente = *(int*)arg;
@@ -45,6 +57,12 @@ void* atender_cliente(void* arg) {
             stick->base_global = memoria_total;
             memoria_total += tamaño_ms;
             list_add(lista_sticks, stick);
+            // Hilo vigilante: detecta si el stick se desconecta
+            int* fd_vigilar = malloc(sizeof(int));
+            *fd_vigilar = fd_cliente;
+            pthread_t hilo_vigilante;
+            pthread_create(&hilo_vigilante, NULL, vigilar_stick, fd_vigilar);
+            pthread_detach(hilo_vigilante);
             // Crear/actualizar el hueco libre en la tabla de segmentos
             pthread_mutex_lock(&m_memoria);
             // Buscamos si ya hay un hueco libre al final para extenderlo
