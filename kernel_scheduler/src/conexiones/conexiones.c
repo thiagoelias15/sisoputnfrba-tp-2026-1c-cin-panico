@@ -206,9 +206,8 @@ void *atender_cliente(void *arg)
     recibir_operacion(socket_cliente);
     char *id_recibida = recibir_mensaje(socket_cliente);
 
-    if (strncmp(id_recibida, "CPU", 3) == 0)
+    if (strcmp(id_recibida, "CPU") == 0)
     {
-        char* identificador_cpu = id_recibida + 4;
         t_cpu_info *cpu_nueva = malloc(sizeof(t_cpu_info));
         cpu_nueva->fd_cpu = socket_cliente;
         cpu_nueva->pid_ejecutando = -1;
@@ -216,7 +215,7 @@ void *atender_cliente(void *arg)
         list_add(lista_cpus_sched, cpu_nueva);
         sem_post(&sem_cpu_libre);
         pthread_mutex_unlock(&m_cpus_sched);
-        log_info(logger, "## CPU %s Conectada", identificador_cpu);
+        log_info(logger, "## CPU con FD %d Conectada", socket_cliente);
 
         while (scheduler_corriendo)
         {
